@@ -281,14 +281,21 @@ docs updated to reflect them directly rather than as caveats:
   can be added later without restructuring tenant/clinic/doctor
   relationships, since nothing else in the schema currently depends on
   plan tier.
-- **Patient self-service web portal**: confirmed **out of v1 scope**.
-  WhatsApp and WordPress are the only patient-facing booking channels;
-  patients never authenticate into anything — they stay anonymous-until-
-  booking, identified by phone (WhatsApp) or whatever the WordPress widget
-  collects. `domain-identity` therefore only needs to handle dashboard
-  staff/doctor/admin auth for v1 (`docs/SECURITY.md` §1) — no OTP/magic-link
-  patient auth, no patient session model, no separate portal frontend. A
-  portal remains a plausible later addition but isn't designed for now.
+- **Patient self-service web portal**: confirmed **out of v1, planned for a
+  later phase** — not speculative, but deliberately sequenced after the
+  channels in this scope. WhatsApp and WordPress are the only
+  patient-facing booking channels for v1; patients never authenticate into
+  anything in this phase — they stay anonymous-until-booking, identified by
+  phone (WhatsApp) or whatever the WordPress widget collects.
+  `domain-identity` therefore only needs to handle dashboard
+  staff/doctor/admin auth for v1 (`docs/SECURITY.md` §1). When the portal
+  phase starts, it adds patient authentication (OTP over WhatsApp/SMS or a
+  magic link, never a password), a patient session model scoped strictly to
+  that patient's own resources (no RBAC matrix needed — always self-scoped,
+  a narrower trust tier than staff roles), and a new `apps/patient-portal`
+  frontend calling the same booking endpoints WordPress and WhatsApp already
+  use (`docs/API.md` §4) — no new booking logic, only a new authenticated
+  entry point onto the existing engine.
 
 ### Implementation phases
 
@@ -303,3 +310,6 @@ docs updated to reflect them directly rather than as caveats:
 6. Production hardening: security review pass, load-testing the
    concurrency guarantees, observability, Jenkins/EKS deploy pipeline
    finalized.
+7. **(Post-v1) Patient self-service portal**: patient auth (OTP/magic-link),
+   patient session model, `apps/patient-portal` frontend — reusing the
+   existing booking API, no changes to the appointment engine itself.
