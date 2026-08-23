@@ -281,16 +281,14 @@ docs updated to reflect them directly rather than as caveats:
   can be added later without restructuring tenant/clinic/doctor
   relationships, since nothing else in the schema currently depends on
   plan tier.
-
-### Still open
-
-- **Patient self-service web portal**: not yet decided whether this is in
-  scope for v1 or a later phase. Current phased plan (below) assumes
-  WhatsApp/WordPress-only booking with dashboard-only staff-side management
-  for v1, and no patient login/portal — flag this before Phase 1 if that
-  assumption is wrong, since it affects the `domain-identity` auth design
-  (`docs/SECURITY.md` §1 already notes OTP/magic-link as the *future*
-  patient-auth mechanism, contingent on this decision).
+- **Patient self-service web portal**: confirmed **out of v1 scope**.
+  WhatsApp and WordPress are the only patient-facing booking channels;
+  patients never authenticate into anything — they stay anonymous-until-
+  booking, identified by phone (WhatsApp) or whatever the WordPress widget
+  collects. `domain-identity` therefore only needs to handle dashboard
+  staff/doctor/admin auth for v1 (`docs/SECURITY.md` §1) — no OTP/magic-link
+  patient auth, no patient session model, no separate portal frontend. A
+  portal remains a plausible later addition but isn't designed for now.
 
 ### Implementation phases
 
