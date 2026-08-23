@@ -186,12 +186,18 @@ Restated because it's a hard product requirement, not just a nice-to-have:
 - WhatsApp and email notifications never carry diagnosis, reason-for-visit
   free text, or clinical notes (`docs/WHATSAPP.md` §6).
 - No clinical-notes feature exists in this v1 scope at all — `patients`
-  intentionally has no free-text medical field (`docs/DATABASE.md` §3). If
-  a future phase adds clinical notes, they get their own
-  access-controlled table with a materially stricter RBAC policy (doctor +
-  explicitly authorized staff only) and would need a dedicated security
-  review before build — flagged as an open question in the final summary,
-  not decided here.
+  intentionally has no free-text medical field (`docs/DATABASE.md` §3). A
+  clinical-notes / EHR-adjacent feature **is confirmed on the future
+  roadmap** (`docs/ARCHITECTURE.md` §11) but is explicitly not being built
+  now; when it is, it gets its own access-controlled table with a
+  materially stricter RBAC policy (doctor + explicitly authorized staff
+  only, no blanket `CLINIC_MANAGER`/`STAFF` read access the way scheduling
+  data has), field-level audit logging on every read (not just write, since
+  clinical-record *access* is itself sensitive), and a dedicated security
+  and compliance review completed before that feature starts implementation
+  — not folded into a routine sprint. Keeping `patients` clean now is what
+  makes that a clean additive change later instead of a migration that has
+  to touch every existing tenant's data.
 - Calendar events created by outbound sync carry only scheduling metadata
   (`docs/CALENDAR_INTEGRATION.md` §5), since calendar visibility can be
   broader than clinical-staff-only.

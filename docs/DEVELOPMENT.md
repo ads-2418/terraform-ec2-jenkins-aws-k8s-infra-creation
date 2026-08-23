@@ -172,10 +172,13 @@ flowchart LR
 
 ## 6. What's deliberately deferred past v1 infra
 
-Multi-region deployment, blue/green or canary rollout automation, and a
-dedicated read-replica for reporting/analytics are not in the v1 production
-architecture — single-region (`ap-south-1`, Mumbai, for India-latency and
-data-residency reasons) with Multi-AZ RDS gives adequate availability for
-the initial customer base, and these are the first infrastructure
-investments to revisit as tenant count/scale grows (see the phased plan in
-the final summary).
+Single-region deployment (`ap-south-1`, Mumbai, for India-latency and
+data-residency reasons) is a **confirmed decision** for v1, not just a
+placeholder assumption (`docs/ARCHITECTURE.md` §11). Multi-region
+deployment, blue/green or canary rollout automation, and a dedicated
+read-replica for reporting/analytics are not in the v1 production
+architecture — Multi-AZ RDS within the single region gives adequate
+availability for the initial customer base, and these are the first
+infrastructure investments to revisit as tenant count/scale grows or a
+specific customer/compliance requirement forces the question (see the
+phased plan in `docs/ARCHITECTURE.md` §11).

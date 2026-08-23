@@ -70,6 +70,12 @@ erDiagram
 Platform-level record for a clinic group/organization.
 `id, name, slug (unique), status (ACTIVE|SUSPENDED|TRIAL), timezone default 'Asia/Kolkata', locale default 'en-IN', created_at, updated_at`
 
+Pricing/plan tiers are deliberately not modeled yet (product decision
+deferred, `docs/ARCHITECTURE.md` §11) — no `plan_tier` column or
+limit-enforcement logic exists in v1. Nothing else in the schema depends on
+plan tier, so it's designed to arrive later as a single additive column
+plus a policy check, not a restructuring of `tenants` or its relationships.
+
 ### `clinics`
 A physical/logical location under a tenant (a tenant may have 1..N clinics).
 `id, tenant_id, name, address, phone, timezone, business_hours (jsonb), created_at, updated_at`
@@ -98,8 +104,12 @@ Patient record, **scoped to a tenant** (a person seen at two unrelated clinics o
 
 Phone is the primary identity key for WhatsApp-originated patients; email/
 name are collected opportunistically. No free-text clinical/medical fields
-live on this table by design (see `docs/SECURITY.md` — clinical notes, if
-ever added, get their own access-controlled table, out of scope for v1).
+live on this table by design. A clinical-notes / EHR-adjacent feature is
+confirmed on the future roadmap (`docs/ARCHITECTURE.md` §11) but explicitly
+out of v1 scope; keeping `patients` clean now means that feature lands
+later as its own access-controlled table (stricter RBAC, field-level read
+audit — see `docs/SECURITY.md` §12) with a simple additive foreign key,
+not a migration touching this table.
 
 ### `doctor_availability`
 Recurring weekly template a doctor's bookable slots are generated from.

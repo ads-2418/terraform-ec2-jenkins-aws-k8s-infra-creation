@@ -245,9 +245,6 @@ short:
 
 ## 11. Architecture decisions, assumptions, risks, open questions
 
-See the final section of the task response for the consolidated list (also
-kept in sync here as the source of truth going forward). Summarized:
-
 **Key decisions**: modular monolith over microservices for v1; shared-schema
 + RLS multi-tenancy; appointment engine as the only writer of booking state;
 BullMQ for all async work; hold TTL enforced by delayed job + transactional
@@ -259,5 +256,52 @@ reliable renewal; clock/timezone correctness across IST-only v1 scope but
 UTC storage; PHI minimization discipline across every notification template
 a tenant admin might customize.
 
-Full list is in the final chat response for this task, structured as
-Decisions / Assumptions / Risks / Open Questions / Phases.
+### Resolved product decisions
+
+Answered by the product owner after the initial architecture pass — these
+were open questions during design and are now settled, with the affected
+docs updated to reflect them directly rather than as caveats:
+
+- **Clinical-notes / EHR-adjacent feature**: confirmed as a **future
+  roadmap item**, not v1 scope. The data model stays deliberately clean of
+  clinical fields now (`docs/DATABASE.md` §3 — no free-text medical field on
+  `patients`) specifically so that feature can land later as its own
+  access-controlled table without a `patients`-table migration. Building it
+  requires its own dedicated security review before implementation — the
+  RBAC and PHI-handling bar for clinical notes is materially higher than
+  anything else in this system (`docs/SECURITY.md` §12).
+- **Deployment region**: single-region (`ap-south-1`, Mumbai) confirmed for
+  v1 — not just a deferred assumption. Multi-region/DR is explicitly out of
+  scope until tenant scale or a specific customer/compliance requirement
+  justifies the added operational cost (`docs/DEVELOPMENT.md` §6).
+- **Pricing / plan tiers**: deferred — no plan-tier gating (doctor count
+  caps, feature flags, usage limits) is designed into the v1 schema or API.
+  `tenants` (`docs/DATABASE.md` §3) is intentionally a small, additive
+  table — a `plan_tier` field and any associated limit-enforcement logic
+  can be added later without restructuring tenant/clinic/doctor
+  relationships, since nothing else in the schema currently depends on
+  plan tier.
+
+### Still open
+
+- **Patient self-service web portal**: not yet decided whether this is in
+  scope for v1 or a later phase. Current phased plan (below) assumes
+  WhatsApp/WordPress-only booking with dashboard-only staff-side management
+  for v1, and no patient login/portal — flag this before Phase 1 if that
+  assumption is wrong, since it affects the `domain-identity` auth design
+  (`docs/SECURITY.md` §1 already notes OTP/magic-link as the *future*
+  patient-auth mechanism, contingent on this decision).
+
+### Implementation phases
+
+1. Core engine + dashboard: schema, appointment engine, RBAC/tenant
+   isolation, admin dashboard CRUD — no external channels yet.
+2. WordPress channel: plugin + widget against the same booking API.
+3. WhatsApp channel: webhook, conversation engine, template approval
+   (start this with Meta early — longest external lead time).
+4. Calendar sync: Google first, then Microsoft Graph.
+5. Notifications hardening: reminders, data-minimization review, delivery
+   failure fallback.
+6. Production hardening: security review pass, load-testing the
+   concurrency guarantees, observability, Jenkins/EKS deploy pipeline
+   finalized.
