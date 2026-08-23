@@ -1,0 +1,618 @@
+// See /docs/DATABASE.md for the design rationale behind every table here.
+// Row-Level Security policies and the audit_log immutability trigger are
+// NOT expressible in this file — they live in a hand-written SQL migration
+// (prisma/migrations/.../migration.sql) that runs alongside Prisma Migrate.
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/client"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum RoleName {
+  PLATFORM_ADMIN
+  TENANT_ADMIN
+  CLINIC_MANAGER
+  DOCTOR
+  STAFF
+}
+
+enum StaffRole {
+  RECEPTIONIST
+  CLINIC_MANAGER
+}
+
+enum DoctorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AppointmentStatus {
+  HELD
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+  COMPLETED
+  NO_SHOW
+  EXPIRED
+}
+
+enum AppointmentChannel {
+  WHATSAPP
+  WORDPRESS
+  DASHBOARD
+}
+
+enum CancelledBy {
+  PATIENT
+  STAFF
+  SYSTEM
+}
+
+enum CalendarSyncStatus {
+  PENDING
+  SYNCED
+  CONFLICT
+  FAILED
+}
+
+enum ActorType {
+  USER
+  PATIENT
+  SYSTEM
+  API_KEY
+}
+
+enum CalendarProvider {
+  GOOGLE
+  MICROSOFT
+}
+
+enum CalendarConnectionStatus {
+  ACTIVE
+  NEEDS_REAUTH
+  DISCONNECTED
+}
+
+enum WhatsappDirection {
+  IN
+  OUT
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  EMAIL
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  DELIVERED
+  READ
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+}
+
+// ---------------------------------------------------------------------------
+// Platform / tenant
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(TRIAL)
+  timezone  String       @default("Asia/Kolkata")
+  locale    String       @default("en-IN")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  clinics         Clinic[]
+  users           User[]
+  patients        Patient[]
+  roleAssignments RoleAssignment[]
+  apiKeys         ApiKey[]
+  refreshTokens   RefreshToken[]
+  idempotencyKeys IdempotencyKey[]
+  auditLogs       AuditLog[]
+  appointments    Appointment[]
+
+  @@map("tenants")
+}
+
+model Clinic {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  name          String
+  address       String?
+  phone         String?
+  timezone      String   @default("Asia/Kolkata")
+  businessHours Json?    @map("business_hours")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  doctors      Doctor[]
+  staff        Staff[]
+  services     Service[]
+  patients     Patient[]
+  appointments Appointment[]
+
+  @@index([tenantId])
+  @@map("clinics")
+}
+
+// ---------------------------------------------------------------------------
+// Identity / RBAC
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid())
+  tenantId     String?    @map("tenant_id")
+  email        String
+  phone        String?
+  passwordHash String     @map("password_hash")
+  mfaSecret    String?    @map("mfa_secret")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleAssignments RoleAssignment[]
+  refreshTokens   RefreshToken[]
+  doctor          Doctor?
+  staff           Staff?
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Role {
+  id   String   @id @default(uuid())
+  name RoleName @unique
+
+  assignments RoleAssignment[]
+
+  @@map("roles")
+}
+
+model RoleAssignment {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  userId   String  @map("user_id")
+  roleId   String  @map("role_id")
+  clinicId String? @map("clinic_id")
+  doctorId String? @map("doctor_id")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId, roleId, clinicId, doctorId])
+  @@index([tenantId, userId])
+  @@map("role_assignments")
+}
+
+/// Tenant-scoped API keys, used by the WordPress plugin (and future
+/// service-to-service channels) to call the Gateway. See docs/SECURITY.md §1.
+model ApiKey {
+  id         String       @id @default(uuid())
+  tenantId   String       @map("tenant_id")
+  name       String
+  keyPrefix  String       @map("key_prefix")
+  hashedKey  String       @map("hashed_key")
+  status     ApiKeyStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  lastUsedAt DateTime?    @map("last_used_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([hashedKey])
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+/// Rotating refresh tokens for dashboard sessions. Only the hash is stored;
+/// the raw token lives only in the httpOnly cookie. See docs/SECURITY.md §1.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  tenantId   String?   @map("tenant_id")
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Clinic operations
+// ---------------------------------------------------------------------------
+
+model Doctor {
+  id                          String       @id @default(uuid())
+  tenantId                    String       @map("tenant_id")
+  clinicId                    String       @map("clinic_id")
+  userId                      String?      @unique @map("user_id")
+  displayName                 String       @map("display_name")
+  specialty                   String?
+  consultationDurationMinutes Int          @default(30) @map("consultation_duration_minutes")
+  status                      DoctorStatus @default(ACTIVE)
+  createdAt                   DateTime     @default(now()) @map("created_at")
+  updatedAt                   DateTime     @updatedAt @map("updated_at")
+
+  clinic         Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user           User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  availability   DoctorAvailability[]
+  appointments   Appointment[]
+  slots          Slot[]
+
+  @@index([tenantId])
+  @@index([clinicId])
+  @@map("doctors")
+}
+
+model Staff {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  clinicId  String    @map("clinic_id")
+  userId    String    @unique @map("user_id")
+  role      StaffRole
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([clinicId])
+  @@map("staff")
+}
+
+model Service {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  clinicId           String   @map("clinic_id")
+  name               String
+  durationMinutes    Int      @map("duration_minutes")
+  bufferBeforeMinutes Int     @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes  Int     @default(0) @map("buffer_after_minutes")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  clinic       Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  availability DoctorAvailability[]
+  slots        Slot[]
+  appointments Appointment[]
+
+  @@index([tenantId])
+  @@index([clinicId])
+  @@map("services")
+}
+
+model Patient {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  clinicId        String   @map("clinic_id")
+  fullName        String   @map("full_name")
+  phone           String
+  email           String?
+  dateOfBirth     DateTime? @map("date_of_birth")
+  preferredLanguage String  @default("en-IN") @map("preferred_language")
+  whatsappOptIn   Boolean  @default(false) @map("whatsapp_opt_in")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("patients")
+}
+
+// ---------------------------------------------------------------------------
+// Appointment engine — see docs/APPOINTMENT_ENGINE.md for the concurrency
+// and state-machine rationale behind every constraint below.
+// ---------------------------------------------------------------------------
+
+model DoctorAvailability {
+  id                 String    @id @default(uuid())
+  tenantId           String    @map("tenant_id")
+  doctorId           String    @map("doctor_id")
+  clinicId           String    @map("clinic_id")
+  dayOfWeek          Int       @map("day_of_week") // 0 (Sunday) - 6 (Saturday)
+  startTime          String    @map("start_time") // "HH:mm", clinic-local
+  endTime            String    @map("end_time")
+  slotDurationMinutes Int      @map("slot_duration_minutes")
+  serviceId          String?   @map("service_id")
+  effectiveFrom      DateTime  @default(now()) @map("effective_from")
+  effectiveUntil     DateTime? @map("effective_until")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  doctor  Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, doctorId])
+  @@map("doctor_availability")
+}
+
+/// A materialized, lockable row created only when someone attempts to hold
+/// a slot — not one row per open slot. See docs/DATABASE.md §3 "slots".
+model Slot {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  doctorId  String   @map("doctor_id")
+  clinicId  String   @map("clinic_id")
+  serviceId String   @map("service_id")
+  startAt   DateTime @map("start_at")
+  endAt     DateTime @map("end_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  doctor       Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  // One-to-many, not one-to-one: a slot accumulates one row per hold
+  // attempt over its lifetime (HELD -> EXPIRED, then HELD again by someone
+  // else, etc). At most one of those may be HELD/CONFIRMED at a time -
+  // enforced by the partial unique index in the RLS/constraints migration,
+  // not by this relation. See docs/APPOINTMENT_ENGINE.md §4.
+  appointments Appointment[]
+
+  // The core double-booking guard at the slot level: only one slot row may
+  // ever exist for a given doctor+start time, regardless of tenant/service.
+  @@unique([tenantId, doctorId, startAt])
+  @@map("slots")
+}
+
+model Appointment {
+  id                        String             @id @default(uuid())
+  tenantId                  String             @map("tenant_id")
+  clinicId                  String             @map("clinic_id")
+  doctorId                  String             @map("doctor_id")
+  patientId                 String             @map("patient_id")
+  serviceId                 String             @map("service_id")
+  // Not @unique: a slot accumulates one appointment row per hold attempt
+  // over its lifetime. The real double-booking guard - at most one
+  // HELD/CONFIRMED row per slot at a time - is a partial unique index
+  // (uq_appointment_active_slot) added in a hand-written SQL migration,
+  // since Prisma's schema language can't express a partial index.
+  // See docs/APPOINTMENT_ENGINE.md §4.
+  slotId                    String             @map("slot_id")
+  status                    AppointmentStatus
+  startAt                   DateTime           @map("start_at")
+  endAt                     DateTime           @map("end_at")
+  channel                   AppointmentChannel
+  holdExpiresAt              DateTime?          @map("hold_expires_at")
+  confirmedAt                DateTime?          @map("confirmed_at")
+  cancelledAt                DateTime?          @map("cancelled_at")
+  cancelledReason             String?            @map("cancelled_reason")
+  cancelledBy                 CancelledBy?       @map("cancelled_by")
+  rescheduledFromId           String?            @unique @map("rescheduled_from_id")
+  externalCalendarEventId    String?            @map("external_calendar_event_id")
+  calendarSyncStatus          CalendarSyncStatus @default(PENDING) @map("calendar_sync_status")
+  idempotencyKeyId            String?            @map("idempotency_key_id")
+  createdAt                   DateTime           @default(now()) @map("created_at")
+  updatedAt                   DateTime           @updatedAt @map("updated_at")
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clinic           Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor           Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient          Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  service          Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  slot             Slot                @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  rescheduledFrom  Appointment?        @relation("AppointmentReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo    Appointment?        @relation("AppointmentReschedule")
+  events           AppointmentEvent[]
+  notifications    NotificationLog[]
+
+  @@index([tenantId, doctorId, startAt])
+  @@index([tenantId, status])
+  @@index([slotId])
+  @@map("appointments")
+}
+
+model AppointmentEvent {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  appointmentId String    @map("appointment_id")
+  fromStatus    AppointmentStatus? @map("from_status")
+  toStatus      AppointmentStatus  @map("to_status")
+  actorType     ActorType @map("actor_type")
+  actorId       String?   @map("actor_id")
+  reason        String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, appointmentId])
+  @@map("appointment_events")
+}
+
+/// See docs/APPOINTMENT_ENGINE.md §6 and docs/API.md §3.
+model IdempotencyKey {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  key            String
+  endpoint       String
+  requestHash    String   @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at")
+  expiresAt      DateTime @map("expires_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, endpoint])
+  @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Calendar integration (schema in place for Phase 4; no domain logic yet)
+// ---------------------------------------------------------------------------
+
+model CalendarConnection {
+  id                    String                    @id @default(uuid())
+  tenantId              String                    @map("tenant_id")
+  doctorId              String                    @map("doctor_id")
+  provider              CalendarProvider
+  providerAccountEmail  String                    @map("provider_account_email")
+  accessTokenEncrypted  String                    @map("access_token_encrypted")
+  refreshTokenEncrypted String                    @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime                  @map("token_expires_at")
+  scope                 String
+  status                CalendarConnectionStatus  @default(ACTIVE)
+  watchChannelId         String?                   @map("watch_channel_id")
+  watchResourceId        String?                   @map("watch_resource_id")
+  watchExpiresAt          DateTime?                 @map("watch_expires_at")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+
+  busyBlocks CalendarBusyBlock[]
+  syncState  CalendarSyncState?
+
+  @@unique([tenantId, doctorId, provider])
+  @@map("calendar_connections")
+}
+
+model CalendarBusyBlock {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  doctorId     String   @map("doctor_id")
+  connectionId String   @map("connection_id")
+  externalId   String   @map("external_id")
+  startAt      DateTime @map("start_at")
+  endAt        DateTime @map("end_at")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+  @@index([tenantId, doctorId, startAt, endAt])
+  @@map("calendar_busy_blocks")
+}
+
+model CalendarSyncState {
+  id               String    @id @default(uuid())
+  connectionId     String    @unique @map("connection_id")
+  syncToken        String?   @map("sync_token")
+  deltaLink        String?   @map("delta_link")
+  lastFullSyncAt   DateTime? @map("last_full_sync_at")
+
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_sync_state")
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp (schema in place for Phase 3; no domain logic yet)
+// ---------------------------------------------------------------------------
+
+model WhatsappSession {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  patientPhone  String   @map("patient_phone")
+  state         String
+  context       Json     @default("{}")
+  appointmentId String?  @map("appointment_id")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, patientPhone])
+  @@map("whatsapp_sessions")
+}
+
+model WhatsappMessage {
+  id             String            @id @default(uuid())
+  tenantId       String            @map("tenant_id")
+  direction      WhatsappDirection
+  waMessageId    String?           @unique @map("wa_message_id")
+  sessionId      String?           @map("session_id")
+  templateName   String?           @map("template_name")
+  payloadSummary Json?             @map("payload_summary")
+  status         String
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("whatsapp_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Notification & audit
+// ---------------------------------------------------------------------------
+
+model NotificationLog {
+  id                String              @id @default(uuid())
+  tenantId          String              @map("tenant_id")
+  appointmentId     String?             @map("appointment_id")
+  channel           NotificationChannel
+  template          String
+  recipient         String
+  status            NotificationStatus  @default(QUEUED)
+  providerMessageId String?             @map("provider_message_id")
+  error             String?
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, appointmentId])
+  @@map("notification_log")
+}
+
+/// Insert-only. UPDATE/DELETE are revoked from the app role and blocked by a
+/// trigger — see the hand-written RLS/audit migration. docs/SECURITY.md §9.
+model AuditLog {
+  id           String    @id @default(uuid())
+  tenantId     String?   @map("tenant_id")
+  actorType    ActorType @map("actor_type")
+  actorId      String?   @map("actor_id")
+  action       String
+  resourceType String    @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  before       Json?
+  after        Json?
+  ip           String?
+  userAgent    String?   @map("user_agent")
+  requestId    String?   @map("request_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_log")
+}

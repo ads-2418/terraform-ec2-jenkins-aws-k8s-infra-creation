@@ -1,0 +1,35 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Prisma
+packages/db/generated/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Terraform (existing infra)
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local Redis persistence artifacts (can land in any cwd a redis-server ran from)
+dump.rdb

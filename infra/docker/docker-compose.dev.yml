@@ -1,0 +1,85 @@
+# Local development stack - docs/DEVELOPMENT.md §2.
+#
+# Typical flow: bring up just the infra services and run api/worker
+# directly on the host for fast iteration:
+#   docker compose -f infra/docker/docker-compose.dev.yml up -d postgres redis mailhog
+#   pnpm --filter @app/db migrate:dev && pnpm --filter @app/db seed
+#   pnpm --filter @app/api dev
+#   pnpm --filter @app/worker dev
+#
+# Or run the full stack containerized:
+#   docker compose -f infra/docker/docker-compose.dev.yml --profile full up
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+
+  api:
+    profiles: ["full"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://app:app@postgres:5432/appdb?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-only-change-me-access
+      JWT_REFRESH_SECRET: dev-only-change-me-refresh
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    ports:
+      - "3000:3000"
+
+  worker:
+    profiles: ["full"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/worker.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://app:app@postgres:5432/appdb?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-only-change-me-access
+      JWT_REFRESH_SECRET: dev-only-change-me-refresh
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+
+volumes:
+  postgres-data:
