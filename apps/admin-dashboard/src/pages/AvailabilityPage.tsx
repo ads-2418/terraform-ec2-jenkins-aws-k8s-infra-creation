@@ -4,6 +4,9 @@ import type { Clinic, Doctor, DoctorAvailability } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** Not exposed in the UI (staff don't need to think about slot granularity) - matches the seed data's own grid. */
+const DEFAULT_SLOT_DURATION_MINUTES = 30;
+
 /** "09:00" -> "22:00" becomes "13h 00m" - how long this window runs for. */
 function windowDuration(startTime: string, endTime: string): string {
   const [startHour, startMinute] = startTime.split(":").map(Number) as [number, number];
@@ -23,7 +26,6 @@ export function AvailabilityPage() {
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("22:00");
-  const [slotDurationMinutes, setSlotDurationMinutes] = useState(30);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +80,7 @@ export function AvailabilityPage() {
         dayOfWeek,
         startTime,
         endTime,
-        slotDurationMinutes,
+        slotDurationMinutes: DEFAULT_SLOT_DURATION_MINUTES,
       });
       await loadWindows(doctorId);
     } catch (err) {
@@ -146,13 +148,6 @@ export function AvailabilityPage() {
             <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
             <span>to</span>
             <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-            <select value={slotDurationMinutes} onChange={(e) => setSlotDurationMinutes(Number(e.target.value))}>
-              <option value={15}>15 min slots</option>
-              <option value={20}>20 min slots</option>
-              <option value={30}>30 min slots</option>
-              <option value={45}>45 min slots</option>
-              <option value={60}>60 min slots</option>
-            </select>
             <button type="submit">Add window</button>
           </form>
 
@@ -167,7 +162,6 @@ export function AvailabilityPage() {
                   <th>Day</th>
                   <th>Hours</th>
                   <th>Duration</th>
-                  <th>Slot length</th>
                   <th></th>
                 </tr>
               </thead>
@@ -179,7 +173,6 @@ export function AvailabilityPage() {
                       {w.startTime} - {w.endTime}
                     </td>
                     <td>{windowDuration(w.startTime, w.endTime)}</td>
-                    <td>{w.slotDurationMinutes} min</td>
                     <td>
                       <button onClick={() => void handleDelete(w.id)}>Remove</button>
                     </td>
@@ -187,7 +180,7 @@ export function AvailabilityPage() {
                 ))}
                 {sortedWindows.length === 0 && (
                   <tr>
-                    <td colSpan={5}>No working hours set for this doctor yet - add one above.</td>
+                    <td colSpan={4}>No working hours set for this doctor yet - add one above.</td>
                   </tr>
                 )}
               </tbody>

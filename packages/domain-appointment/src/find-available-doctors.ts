@@ -69,11 +69,17 @@ function projectWorkingIntervals(args: {
         { year: local.year, month: local.month, day: local.day, hour: end.hour, minute: end.minute },
         args.clinicTimezone,
       );
-      if (windowStart < w.effectiveFrom) continue;
-      if (w.effectiveUntil && windowStart > w.effectiveUntil) continue;
+      // Clip to effectiveFrom/effectiveUntil rather than dropping the whole
+      // day when the boundary falls partway through it - a window created
+      // mid-afternoon must still show the rest of that same day as free
+      // (matching generateCandidateSlots' per-slot check in availability.ts,
+      // which is exactly why a doctor whose window was just added showed
+      // real bookable slots there but nothing here before this fix).
+      const effectiveStart = w.effectiveFrom > windowStart ? w.effectiveFrom : windowStart;
+      const effectiveEnd = w.effectiveUntil && w.effectiveUntil < windowEnd ? w.effectiveUntil : windowEnd;
 
-      const clippedStart = windowStart < args.from ? args.from : windowStart;
-      const clippedEnd = windowEnd > args.to ? args.to : windowEnd;
+      const clippedStart = effectiveStart < args.from ? args.from : effectiveStart;
+      const clippedEnd = effectiveEnd > args.to ? args.to : effectiveEnd;
       if (clippedStart < clippedEnd) intervals.push({ startAt: clippedStart, endAt: clippedEnd });
     }
   }
