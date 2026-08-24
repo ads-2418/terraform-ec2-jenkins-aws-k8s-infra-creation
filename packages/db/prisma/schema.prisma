@@ -161,6 +161,7 @@ model Clinic {
   services     Service[]
   patients     Patient[]
   appointments Appointment[]
+  holidays     Holiday[]
 
   @@index([tenantId])
   @@map("clinics")
@@ -277,6 +278,7 @@ model Doctor {
   availability   DoctorAvailability[]
   appointments   Appointment[]
   slots          Slot[]
+  holidays       Holiday[]
 
   @@index([tenantId])
   @@index([clinicId])
@@ -369,6 +371,35 @@ model DoctorAvailability {
 
   @@index([tenantId, doctorId])
   @@map("doctor_availability")
+}
+
+/// A blocked calendar day - no slots are ever generated for it, checked by
+/// both the availability read path and holdSlot's re-verification (never
+/// trust that a client's cached availability listing still reflects a
+/// holiday added after it was fetched). doctorId null = clinic-wide
+/// closure (applies to every doctor at that clinic); doctorId set = one
+/// doctor's individual leave day. See docs/APPOINTMENT_ENGINE.md.
+///
+/// No unique constraint on (clinicId, doctorId, date): Postgres treats
+/// NULL as distinct from NULL in a unique index, so a compound key
+/// including the nullable doctorId wouldn't actually dedupe clinic-wide
+/// holidays - same reasoning as role_assignments (docs/DATABASE.md §3).
+/// Idempotent creation is handled in the domain layer instead.
+model Holiday {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  clinicId  String   @map("clinic_id")
+  doctorId  String?  @map("doctor_id")
+  date      DateTime @db.Date
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clinic Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor Doctor? @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clinicId, date])
+  @@index([tenantId, doctorId, date])
+  @@map("holidays")
 }
 
 /// A materialized, lockable row created only when someone attempts to hold

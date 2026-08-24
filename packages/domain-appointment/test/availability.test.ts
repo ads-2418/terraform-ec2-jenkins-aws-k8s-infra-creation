@@ -122,6 +122,47 @@ describe("generateCandidateSlots", () => {
     expect(slots.map((s) => s.startAt.toISOString())).toEqual(["2026-01-14T04:00:00.000Z"]);
   });
 
+  it("excludes every slot on a holiday date, but not adjacent days", () => {
+    const windows = [
+      {
+        doctorId: DOCTOR_ID,
+        serviceId: null,
+        dayOfWeek: 3, // Wednesday
+        startTime: "09:00",
+        endTime: "10:00",
+        slotDurationMinutes: 30,
+        effectiveFrom: new Date("2000-01-01T00:00:00Z"),
+        effectiveUntil: null,
+      },
+      {
+        doctorId: DOCTOR_ID,
+        serviceId: null,
+        dayOfWeek: 4, // Thursday
+        startTime: "09:00",
+        endTime: "10:00",
+        slotDurationMinutes: 30,
+        effectiveFrom: new Date("2000-01-01T00:00:00Z"),
+        effectiveUntil: null,
+      },
+    ];
+
+    // 2026-01-14 is Wednesday, 2026-01-15 is Thursday (both IST).
+    const slots = generateCandidateSlots({
+      windows,
+      serviceId: SERVICE_ID,
+      serviceDurationMinutes: 30,
+      clinicTimezone: "Asia/Kolkata",
+      from: new Date("2026-01-14T00:00:00Z"),
+      to: new Date("2026-01-16T00:00:00Z"),
+      now: new Date("2000-01-01T00:00:00Z"),
+      holidayDates: new Set(["2026-01-14"]),
+    });
+
+    // Wednesday fully excluded; Thursday's slots still generated.
+    expect(slots.every((s) => !s.startAt.toISOString().startsWith("2026-01-14"))).toBe(true);
+    expect(slots.some((s) => s.startAt.toISOString().startsWith("2026-01-15"))).toBe(true);
+  });
+
   it("excludes slots at or before `now`", () => {
     const windows = [
       {

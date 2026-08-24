@@ -1,6 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, idempotencyKey } from "../api/client";
 import type { Appointment, AvailabilitySlot, Clinic, Doctor, Service } from "../types";
+
+const DAYS_AHEAD = 60;
+
+/** "YYYY-MM-DD" in the clinic's own timezone - en-CA formats that way natively, no manual date math needed. */
+function localDateKey(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone });
+}
+
+function localTimeLabel(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString("en-IN", { timeZone, hour: "2-digit", minute: "2-digit" });
+}
+
+function todayPlus(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 export function AppointmentsPage() {
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -10,11 +27,14 @@ export function AppointmentsPage() {
   const [serviceId, setServiceId] = useState("");
   const [clinicId, setClinicId] = useState("");
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [selectedDate, setSelectedDate] = useState(todayPlus(1));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patientPhone, setPatientPhone] = useState("");
   const [patientName, setPatientName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const clinicTimezone = clinics.find((c) => c.id === clinicId)?.timezone ?? "Asia/Kolkata";
 
   useEffect(() => {
     void (async () => {
@@ -38,10 +58,7 @@ export function AppointmentsPage() {
     if (!doctorId || !serviceId) return;
     setError(null);
     const from = new Date();
-    from.setUTCHours(0, 0, 0, 0);
-    from.setUTCDate(from.getUTCDate() + 1);
-    const to = new Date(from);
-    to.setUTCDate(to.getUTCDate() + 7);
+    const to = new Date(from.getTime() + DAYS_AHEAD * 24 * 60 * 60 * 1000);
     try {
       const res = await api.get<{ slots: AvailabilitySlot[] }>(
         `/v1/availability?doctorId=${doctorId}&serviceId=${serviceId}&from=${from.toISOString()}&to=${to.toISOString()}`,
@@ -63,6 +80,25 @@ export function AppointmentsPage() {
     void loadAppointments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctorId, serviceId]);
+
+  // Group fetched slots by their clinic-local calendar date, so picking a
+  // date is a client-side filter rather than a fresh request per date.
+  const slotsByDate = useMemo(() => {
+    const map = new Map<string, AvailabilitySlot[]>();
+    for (const slot of slots) {
+      const key = localDateKey(slot.startAt, clinicTimezone);
+      const bucket = map.get(key);
+      if (bucket) bucket.push(slot);
+      else map.set(key, [slot]);
+    }
+    return map;
+  }, [slots, clinicTimezone]);
+
+  const datesWithSlots = useMemo(
+    () => new Set(slotsByDate.keys()),
+    [slotsByDate],
+  );
+  const slotsForSelectedDate = slotsByDate.get(selectedDate) ?? [];
 
   async function handleHold(startAt: string) {
     setError(null);
@@ -130,15 +166,31 @@ export function AppointmentsPage() {
         <input placeholder="Patient phone (+91...)" value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} />
         <input placeholder="Patient name" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
       </div>
+
+      <div className="booking-picker">
+        <label>
+          Date
+          <input
+            type="date"
+            value={selectedDate}
+            min={todayPlus(0)}
+            max={todayPlus(DAYS_AHEAD)}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+        </label>
+        {!datesWithSlots.has(selectedDate) && (
+          <p className="hint">No open slots on this date (fully booked, outside working hours, or a holiday).</p>
+        )}
+      </div>
+
       <div className="slot-grid">
-        {slots.length === 0 && <p>No open slots in the next 7 days.</p>}
-        {slots.map((s) => (
+        {slotsForSelectedDate.map((s) => (
           <button
             key={s.startAt}
             disabled={busy || !patientPhone || !patientName}
             onClick={() => void handleHold(s.startAt)}
           >
-            {new Date(s.startAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+            {localTimeLabel(s.startAt, clinicTimezone)}
           </button>
         ))}
       </div>
@@ -156,7 +208,7 @@ export function AppointmentsPage() {
         <tbody>
           {appointments.map((a) => (
             <tr key={a.id}>
-              <td>{new Date(a.startAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</td>
+              <td>{new Date(a.startAt).toLocaleString("en-IN", { timeZone: clinicTimezone, dateStyle: "short", timeStyle: "short" })}</td>
               <td>{a.status}</td>
               <td>{a.channel}</td>
               <td>

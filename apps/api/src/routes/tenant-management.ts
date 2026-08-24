@@ -3,23 +3,28 @@ import { z } from "zod";
 import type { PrismaClient } from "@app/db";
 import {
   addAvailabilityWindow,
+  addHoliday,
   createClinic,
   createDoctor,
   createService,
   createStaff,
   getClinic,
   getDoctor,
+  getHoliday,
   listAvailabilityWindows,
   listClinics,
   listDoctors,
+  listHolidays,
   listServices,
   listStaff,
+  removeHoliday,
   updateClinic,
   updateDoctor,
   updateService,
 } from "@app/domain-tenant";
 import { assertAuthorizedForResource, assertCan } from "@app/domain-identity";
 import { writeAuditLog } from "@app/domain-audit";
+import { ValidationError } from "@app/shared";
 import { requireTenantAuth, requireUserAuth } from "../middleware/auth.js";
 import { parseBody } from "../validate.js";
 
@@ -79,6 +84,20 @@ const createStaffSchema = z.object({
   role: z.enum(["RECEPTIONIST", "CLINIC_MANAGER"]),
   login: z.object({ email: z.string().email(), password: z.string().min(8) }),
 });
+
+const createHolidaySchema = z.object({
+  clinicId: z.string().uuid(),
+  /** Omit for a clinic-wide closure; set for one doctor's individual leave day. */
+  doctorId: z.string().uuid().optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  reason: z.string().max(200).optional(),
+});
+
+/** A calendar date, not an instant - normalized to UTC midnight so it round-trips through @db.Date unambiguously (docs/DATABASE.md). */
+function parseDateOnly(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(year, month - 1, day));
+}
 
 export function registerTenantManagementRoutes(app: FastifyInstance, deps: { prisma: PrismaClient }): void {
   const { prisma } = deps;
@@ -289,5 +308,77 @@ export function registerTenantManagementRoutes(app: FastifyInstance, deps: { pri
       ip: request.ip,
     });
     reply.status(201).send(staff);
+  });
+
+  // --- Holidays ---
+  // doctorId omitted = clinic-wide closure (every doctor); doctorId set =
+  // one doctor's individual leave day. Blocks the appointment engine's
+  // availability computation AND holdSlot's re-verification - never just
+  // a UI-level filter. See docs/APPOINTMENT_ENGINE.md.
+  app.get("/v1/holidays", async (request) => {
+    const auth = requireTenantAuth(request);
+    const query = request.query as { clinicId?: string; doctorId?: string };
+    if (!query.clinicId) {
+      throw new ValidationError([{ path: "clinicId", message: "clinicId query param is required." }]);
+    }
+    return {
+      holidays: await listHolidays(prisma, {
+        tenantId: auth.tenantId,
+        clinicId: query.clinicId,
+        doctorId: query.doctorId,
+      }),
+    };
+  });
+
+  app.post("/v1/holidays", async (request, reply) => {
+    const auth = requireUserAuth(request);
+    if (!auth.tenantId) throw new Error("Platform users cannot manage holidays via this endpoint.");
+    const body = parseBody(createHolidaySchema, request.body);
+    assertAuthorizedForResource(auth.roles, "availability:write", {
+      clinicId: body.clinicId,
+      doctorId: body.doctorId,
+    });
+    const holiday = await addHoliday(prisma, {
+      tenantId: auth.tenantId,
+      clinicId: body.clinicId,
+      doctorId: body.doctorId,
+      date: parseDateOnly(body.date),
+      reason: body.reason,
+    });
+    await writeAuditLog(prisma, {
+      tenantId: auth.tenantId,
+      actorType: "USER",
+      actorId: auth.userId,
+      action: "holiday.create",
+      resourceType: "holiday",
+      resourceId: holiday.id,
+      after: holiday,
+      requestId: request.id,
+      ip: request.ip,
+    });
+    reply.status(201).send(holiday);
+  });
+
+  app.delete<{ Params: { id: string } }>("/v1/holidays/:id", async (request, reply) => {
+    const auth = requireUserAuth(request);
+    if (!auth.tenantId) throw new Error("Platform users cannot manage holidays via this endpoint.");
+    const holiday = await getHoliday(prisma, { tenantId: auth.tenantId, holidayId: request.params.id });
+    assertAuthorizedForResource(auth.roles, "availability:write", {
+      clinicId: holiday.clinicId,
+      doctorId: holiday.doctorId ?? undefined,
+    });
+    await removeHoliday(prisma, { tenantId: auth.tenantId, holidayId: holiday.id });
+    await writeAuditLog(prisma, {
+      tenantId: auth.tenantId,
+      actorType: "USER",
+      actorId: auth.userId,
+      action: "holiday.delete",
+      resourceType: "holiday",
+      resourceId: holiday.id,
+      before: holiday,
+      requestId: request.id,
+      ip: request.ip,
+    });
+    reply.status(204).send();
   });
 }

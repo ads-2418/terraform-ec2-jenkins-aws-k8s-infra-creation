@@ -145,6 +145,24 @@ td {
   margin-bottom: 1rem;
 }
 
+.booking-picker {
+  margin: 1rem 0;
+}
+
+.booking-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  width: fit-content;
+}
+
+.hint {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
 .slot-grid {
   display: flex;
   flex-wrap: wrap;

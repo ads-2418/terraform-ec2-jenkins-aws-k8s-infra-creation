@@ -143,6 +143,7 @@ async function createHeldAppointment(
   // transaction. docs/APPOINTMENT_ENGINE.md §3 step 6.
   const withinHours = await isWithinDoctorAvailability(tx, {
     doctorId: input.doctorId,
+    clinicId: input.clinicId,
     serviceId: input.serviceId,
     startAt: input.startAt,
     endAt,

@@ -52,3 +52,11 @@ export interface AvailabilitySlot {
   startAt: string;
   endAt: string;
 }
+
+export interface Holiday {
+  id: string;
+  clinicId: string;
+  doctorId: string | null;
+  date: string;
+  reason: string | null;
+}

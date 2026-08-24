@@ -22,6 +22,46 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && bStart < aEnd;
 }
 
+function dateKey(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * A holiday's `date` column (@db.Date) represents a calendar day directly,
+ * not an instant to convert - it's written as UTC midnight of the intended
+ * day (see domain-tenant's holiday.ts), so reading it back via UTC getters
+ * recovers exactly that day, with no timezone math involved.
+ */
+function holidayDateKey(date: Date): string {
+  return dateKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+}
+
+/**
+ * Every holiday that could block this doctor on this range - clinic-wide
+ * closures and the doctor's own leave days, unioned. Read directly here
+ * (not via domain-tenant) for the same reason doctor_availability is read
+ * directly below: the appointment engine owns its own read path rather
+ * than depending on another domain package.
+ */
+async function fetchHolidayDateKeys(
+  tx: Prisma.TransactionClient,
+  args: { clinicId: string; doctorId: string; from: Date; to: Date },
+): Promise<Set<string>> {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const holidays = await tx.holiday.findMany({
+    where: {
+      clinicId: args.clinicId,
+      OR: [{ doctorId: null }, { doctorId: args.doctorId }],
+      date: {
+        gte: new Date(args.from.getTime() - ONE_DAY_MS),
+        lte: new Date(args.to.getTime() + ONE_DAY_MS),
+      },
+    },
+    select: { date: true },
+  });
+  return new Set(holidays.map((h) => holidayDateKey(h.date)));
+}
+
 /**
  * Projects recurring weekly availability windows into candidate start
  * times over [from, to) - docs/APPOINTMENT_ENGINE.md §7. Pure function
@@ -35,6 +75,8 @@ export function generateCandidateSlots(params: {
   from: Date;
   to: Date;
   now?: Date;
+  /** "YYYY-MM-DD" clinic-local calendar dates to skip entirely - see holidayDateKey. */
+  holidayDates?: Set<string>;
 }): CandidateSlot[] {
   const { windows, serviceId, serviceDurationMinutes, clinicTimezone, from, to } = params;
   const now = params.now ?? new Date();
@@ -56,6 +98,8 @@ export function generateCandidateSlots(params: {
   // but we still cap iterations defensively against a pathological range.
   for (let i = 0; i < 370 && cursor < to; i++, cursor = addDaysUtc(cursor, 1)) {
     const local = utcToZonedParts(cursor, clinicTimezone);
+    if (params.holidayDates?.has(dateKey(local.year, local.month, local.day))) continue;
+
     const windowsForDay = relevantWindows.filter((w) => w.dayOfWeek === local.dayOfWeek);
 
     for (const window of windowsForDay) {
@@ -122,13 +166,21 @@ export async function computeAvailability(
   if (!doctor) throw new NotFoundError("Doctor");
   if (!service) throw new NotFoundError("Service");
 
-  const windows = await tx.doctorAvailability.findMany({
-    where: {
+  const [windows, holidayDates] = await Promise.all([
+    tx.doctorAvailability.findMany({
+      where: {
+        doctorId: input.doctorId,
+        effectiveFrom: { lte: input.to },
+        OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: input.from } }],
+      },
+    }),
+    fetchHolidayDateKeys(tx, {
+      clinicId: doctor.clinicId,
       doctorId: input.doctorId,
-      effectiveFrom: { lte: input.to },
-      OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: input.from } }],
-    },
-  });
+      from: input.from,
+      to: input.to,
+    }),
+  ]);
 
   const candidates = generateCandidateSlots({
     windows,
@@ -138,6 +190,7 @@ export async function computeAvailability(
     from: input.from,
     to: input.to,
     now: input.now,
+    holidayDates,
   });
 
   if (candidates.length === 0) return [];
@@ -183,15 +236,30 @@ export async function computeAvailability(
  */
 export async function isWithinDoctorAvailability(
   tx: Prisma.TransactionClient,
-  args: { doctorId: string; serviceId: string; startAt: Date; endAt: Date; clinicTimezone: string },
+  args: {
+    doctorId: string;
+    clinicId: string;
+    serviceId: string;
+    startAt: Date;
+    endAt: Date;
+    clinicTimezone: string;
+  },
 ): Promise<boolean> {
-  const windows = await tx.doctorAvailability.findMany({
-    where: {
+  const [windows, holidayDates] = await Promise.all([
+    tx.doctorAvailability.findMany({
+      where: {
+        doctorId: args.doctorId,
+        effectiveFrom: { lte: args.startAt },
+        OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: args.startAt } }],
+      },
+    }),
+    fetchHolidayDateKeys(tx, {
+      clinicId: args.clinicId,
       doctorId: args.doctorId,
-      effectiveFrom: { lte: args.startAt },
-      OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: args.startAt } }],
-    },
-  });
+      from: args.startAt,
+      to: args.endAt,
+    }),
+  ]);
 
   const durationMinutes = (args.endAt.getTime() - args.startAt.getTime()) / 60_000;
   const candidates = generateCandidateSlots({
@@ -202,6 +270,7 @@ export async function isWithinDoctorAvailability(
     from: args.startAt,
     to: new Date(args.startAt.getTime() + 1),
     now: new Date(0), // don't reject on the "must be in the future" check here - a hold in flight for a startAt a few ms out is still valid
+    holidayDates,
   });
 
   return candidates.some((c) => c.startAt.getTime() === args.startAt.getTime());

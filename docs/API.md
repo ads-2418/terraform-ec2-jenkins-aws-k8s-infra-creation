@@ -71,6 +71,9 @@ on: hold, confirm, cancel, reschedule. Optional-but-honored elsewhere.
 | `PUT /v1/doctors/:id/availability` | Set recurring availability templates | JWT, `CLINIC_MANAGER+` or self (`DOCTOR`) |
 | `GET/POST /v1/services` | Bookable service catalog | JWT, `CLINIC_MANAGER+` |
 | `GET/POST /v1/staff` | Staff management | JWT, `CLINIC_MANAGER+` |
+| `GET /v1/holidays?clinicId&doctorId` | List blocked dates | JWT, scoped |
+| `POST /v1/holidays` | Block a date — omit `doctorId` for a clinic-wide closure, set it for one doctor's leave day | JWT, `CLINIC_MANAGER+` or self (`DOCTOR`, own `doctorId` only) |
+| `DELETE /v1/holidays/:id` | Unblock a date | JWT, scoped |
 
 ### Availability & booking (`domain-appointment`) — the surface WordPress and WhatsApp both ultimately call
 | Method & path | Purpose | Auth |
