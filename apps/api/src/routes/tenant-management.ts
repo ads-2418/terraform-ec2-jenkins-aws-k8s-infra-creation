@@ -17,6 +17,7 @@ import {
   listHolidays,
   listServices,
   listStaff,
+  removeAvailabilityWindow,
   removeHoliday,
   updateClinic,
   updateDoctor,
@@ -282,6 +283,31 @@ export function registerTenantManagementRoutes(app: FastifyInstance, deps: { pri
     });
     reply.status(201).send(window);
   });
+
+  app.delete<{ Params: { id: string; availabilityId: string } }>(
+    "/v1/doctors/:id/availability/:availabilityId",
+    async (request, reply) => {
+      const auth = requireUserAuth(request);
+      if (!auth.tenantId) throw new Error("Platform users cannot manage availability via this endpoint.");
+      assertAuthorizedForResource(auth.roles, "availability:write", { doctorId: request.params.id });
+      await removeAvailabilityWindow(prisma, {
+        tenantId: auth.tenantId,
+        doctorId: request.params.id,
+        availabilityId: request.params.availabilityId,
+      });
+      await writeAuditLog(prisma, {
+        tenantId: auth.tenantId,
+        actorType: "USER",
+        actorId: auth.userId,
+        action: "doctor_availability.delete",
+        resourceType: "doctor_availability",
+        resourceId: request.params.availabilityId,
+        requestId: request.id,
+        ip: request.ip,
+      });
+      reply.status(204).send();
+    },
+  );
 
   // --- Staff ---
   app.get("/v1/staff", async (request) => {

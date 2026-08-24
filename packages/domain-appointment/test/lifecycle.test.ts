@@ -366,4 +366,15 @@ describe("appointment lifecycle", () => {
     expect(result.expired).toBe(false);
     expect(result.appointment.status).toBe("CONFIRMED");
   });
+
+  it("rejects a hold for a slot time that has already passed", async () => {
+    const fixture = await createFixture();
+    // Grid-aligned (30-min) and comfortably outside the small latency-grace
+    // window holdSlot applies - this must never succeed, or a stale
+    // client-side slot list (or a crafted request) could book a time that
+    // has already happened.
+    const pastSlot = futureSlotTime(-40);
+
+    await expect(hold(fixture, pastSlot)).rejects.toBeInstanceOf(SlotUnavailableError);
+  });
 });

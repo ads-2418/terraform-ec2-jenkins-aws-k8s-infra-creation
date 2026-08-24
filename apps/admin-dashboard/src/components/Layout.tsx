@@ -20,6 +20,7 @@ export function Layout() {
           <NavLink to="/doctors">Doctors</NavLink>
           <NavLink to="/services">Services</NavLink>
           <NavLink to="/staff">Staff</NavLink>
+          <NavLink to="/availability">Working Hours</NavLink>
           <NavLink to="/holidays">Holidays</NavLink>
         </nav>
         <div className="sidebar-footer">

@@ -60,3 +60,14 @@ export interface Holiday {
   date: string;
   reason: string | null;
 }
+
+export interface DoctorAvailability {
+  id: string;
+  doctorId: string;
+  clinicId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+  serviceId: string | null;
+}

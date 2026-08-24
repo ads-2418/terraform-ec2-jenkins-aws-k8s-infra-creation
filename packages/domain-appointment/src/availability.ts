@@ -22,6 +22,9 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && bStart < aEnd;
 }
 
+/** See isWithinDoctorAvailability's use of this - a latency tolerance, not a booking grace period. */
+const PAST_SLOT_HOLD_GRACE_MS = 2 * 60_000;
+
 function dateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -269,7 +272,14 @@ export async function isWithinDoctorAvailability(
     clinicTimezone: args.clinicTimezone,
     from: args.startAt,
     to: new Date(args.startAt.getTime() + 1),
-    now: new Date(0), // don't reject on the "must be in the future" check here - a hold in flight for a startAt a few ms out is still valid
+    // A grace window, not "don't check": the client fetched availability
+    // (which does apply the real future check) and some latency passed
+    // before this hold request arrived, so startAt can legitimately be a
+    // few seconds behind the clock by the time we get here. But a request
+    // for a startAt that's genuinely in the past - e.g. a client that sat
+    // on a stale slot list for several minutes - must still be rejected
+    // here, or holdSlot would happily book times that have already passed.
+    now: new Date(Date.now() - PAST_SLOT_HOLD_GRACE_MS),
     holidayDates,
   });
 
