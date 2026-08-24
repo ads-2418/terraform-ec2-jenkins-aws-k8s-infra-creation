@@ -62,8 +62,12 @@ async function main(): Promise<void> {
       name: "Demo Multispecialty Clinic",
       slug: "demo-clinic",
       status: "ACTIVE",
+      // Fixed dev-only value so the WhatsApp webhook simulation script
+      // (scripts/simulate-whatsapp-webhook.mjs) has a deterministic target -
+      // not a real Meta phone number ID.
+      whatsappPhoneNumberId: "demo-phone-number-id",
     },
-    update: {},
+    update: { whatsappPhoneNumberId: "demo-phone-number-id" },
   });
 
   const roles = await prisma.role.findMany();

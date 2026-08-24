@@ -45,3 +45,17 @@ export async function createTenant(prisma: PrismaClient, input: CreateTenantInpu
 
   return tenant;
 }
+
+/**
+ * Resolves a tenant from an inbound WhatsApp webhook's `metadata.phone_number_id`
+ * - the only identity a webhook carries before any other auth context
+ * exists. `tenants` has no RLS (it IS the tenant boundary), so this is a
+ * plain lookup, same as the API-key bootstrap pattern in domain-identity.
+ * docs/WHATSAPP.md §4.
+ */
+export async function findTenantByWhatsappPhoneNumberId(
+  prisma: PrismaClient,
+  phoneNumberId: string,
+): Promise<Tenant | null> {
+  return prisma.tenant.findUnique({ where: { whatsappPhoneNumberId: phoneNumberId } });
+}

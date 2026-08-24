@@ -109,9 +109,15 @@ business logic" (`ARCHITECTURE.md` §1).
 | `GET /v1/webhooks/whatsapp` | Meta subscription verification handshake | `hub.verify_token` |
 | `POST /v1/webhooks/whatsapp` | Inbound message/status webhook | `X-Hub-Signature-256` |
 
-No other WhatsApp endpoints are public — everything else happens inside the
-conversation worker calling the booking endpoints above in-process (or via
-internal HTTP if `domain-whatsapp` is ever split into its own deployable).
+No other WhatsApp endpoints are public. The webhook route only verifies,
+resolves the tenant, dedups, and enqueues (`WHATSAPP.md` §4); the
+`whatsapp-inbound` worker calls `domain-appointment`'s functions
+(`holdSlot`, `confirmAppointment`, `cancelAppointment`,
+`rescheduleAppointment`) directly in-process, the same way `apps/api`'s
+route handlers do — not via HTTP to the endpoints above. Both channels
+still go through the identical engine functions and their idempotency-key
+handling, which is what "channels never contain booking business logic"
+(`ARCHITECTURE.md` §1) actually enforces here.
 
 ### Audit (`domain-audit`)
 | Method & path | Purpose | Auth |

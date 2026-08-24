@@ -12,6 +12,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerTenantManagementRoutes } from "./routes/tenant-management.js";
 import { registerAppointmentRoutes } from "./routes/appointments.js";
 import { registerAuditRoutes } from "./routes/audit.js";
+import { registerWhatsappWebhookRoutes } from "./routes/whatsapp-webhook.js";
 
 export function buildApp(config: AppConfig, deps?: { redis?: Redis }): FastifyInstance {
   const prisma = getPrismaClient();
@@ -23,6 +24,23 @@ export function buildApp(config: AppConfig, deps?: { redis?: Redis }): FastifyIn
   // arbitrary pino instance without losing route-handler type safety.
   // rootLogger is still used directly by the error handler below.
   const app = Fastify({ logger: true });
+
+  // Captures the exact JSON bytes Meta sent alongside the parsed body -
+  // the WhatsApp webhook's X-Hub-Signature-256 is an HMAC over those raw
+  // bytes (docs/WHATSAPP.md §4), which a reserialized JSON.stringify()
+  // can't be trusted to reproduce byte-for-byte.
+  app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
+    request.rawBody = body as Buffer;
+    if (body.length === 0) {
+      done(null, undefined);
+      return;
+    }
+    try {
+      done(null, JSON.parse((body as Buffer).toString("utf8")));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
 
   const authConfig = {
     accessSecret: config.JWT_ACCESS_SECRET,
@@ -53,6 +71,12 @@ export function buildApp(config: AppConfig, deps?: { redis?: Redis }): FastifyIn
     queueRedis: redis,
   });
   registerAuditRoutes(app, { prisma });
+  registerWhatsappWebhookRoutes(app, {
+    prisma,
+    queueRedis: redis,
+    appSecret: config.WHATSAPP_APP_SECRET,
+    verifyToken: config.WHATSAPP_VERIFY_TOKEN,
+  });
 
   app.addHook("onClose", async () => {
     redis.disconnect();

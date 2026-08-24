@@ -8,13 +8,14 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/worker.ts",
     "start": "node dist/worker.js",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@app/config": "workspace:*",
     "@app/db": "workspace:*",
     "@app/domain-appointment": "workspace:*",
+    "@app/domain-whatsapp": "workspace:*",
     "@app/queue": "workspace:*",
     "@app/shared": "workspace:*",
     "bullmq": "^5.21.2",

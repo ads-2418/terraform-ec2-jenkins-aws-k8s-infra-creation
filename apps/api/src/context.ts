@@ -10,5 +10,9 @@ declare module "fastify" {
     // Fastify already provides `request.id` as the correlation id used in
     // docs/API.md §2's error.requestId - no need to duplicate it here.
     auth?: AuthContext;
+    // Raw JSON body bytes, captured by app.ts's content-type parser -
+    // needed to verify the WhatsApp webhook's X-Hub-Signature-256, which
+    // is an HMAC over the exact bytes Meta sent, not the reserialized object.
+    rawBody?: Buffer;
   }
 }

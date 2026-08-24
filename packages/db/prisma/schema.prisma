@@ -128,6 +128,11 @@ model Tenant {
   status    TenantStatus @default(TRIAL)
   timezone  String       @default("Asia/Kolkata")
   locale    String       @default("en-IN")
+  /// WhatsApp Business Cloud API phone number ID (Meta's `metadata.phone_number_id`
+  /// on inbound webhooks) - how an inbound webhook resolves to a tenant before any
+  /// other auth context exists. One tenant, one WhatsApp entry point, matching the
+  /// Cloud API's per-phone-number webhook routing (docs/WHATSAPP.md).
+  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
 

@@ -28,6 +28,18 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   EMAIL_FROM: z.string().email().default("no-reply@example.com"),
 
+  // --- WhatsApp Business Cloud API (docs/WHATSAPP.md) ---------------------
+  // WHATSAPP_ACCESS_TOKEN is intentionally optional: unset means "no real
+  // Meta credentials configured" and apps/worker falls back to the
+  // simulated send client (logs instead of calling out) - see
+  // docs/DEVELOPMENT.md. The other three always have a value so webhook
+  // signature verification and the GET handshake work in local dev/test
+  // even without real credentials.
+  WHATSAPP_APP_SECRET: z.string().default("dev-only-whatsapp-app-secret"),
+  WHATSAPP_VERIFY_TOKEN: z.string().default("dev-only-verify-token"),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_API_VERSION: z.string().default("v21.0"),
+
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 
