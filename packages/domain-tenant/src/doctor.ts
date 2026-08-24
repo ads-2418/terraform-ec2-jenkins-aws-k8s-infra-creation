@@ -7,6 +7,7 @@ export interface CreateDoctorInput {
   clinicId: string;
   displayName: string;
   specialty?: string;
+  photoUrl?: string;
   consultationDurationMinutes?: number;
   /** Optional: create a dashboard login for this doctor alongside the record. */
   login?: { email: string; password: string };
@@ -31,6 +32,7 @@ export async function createDoctor(prisma: PrismaClient, input: CreateDoctorInpu
         userId,
         displayName: input.displayName,
         specialty: input.specialty,
+        photoUrl: input.photoUrl,
         consultationDurationMinutes: input.consultationDurationMinutes ?? 30,
       },
     });
@@ -75,6 +77,7 @@ export interface UpdateDoctorInput {
   doctorId: string;
   displayName?: string;
   specialty?: string;
+  photoUrl?: string;
   consultationDurationMinutes?: number;
   status?: "ACTIVE" | "INACTIVE";
 }
@@ -88,6 +91,7 @@ export async function updateDoctor(prisma: PrismaClient, input: UpdateDoctorInpu
       data: {
         displayName: input.displayName,
         specialty: input.specialty,
+        photoUrl: input.photoUrl,
         consultationDurationMinutes: input.consultationDurationMinutes,
         status: input.status,
       },

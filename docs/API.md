@@ -69,6 +69,7 @@ on: hold, confirm, cancel, reschedule. Optional-but-honored elsewhere.
 | `GET/POST /v1/doctors` | List/create doctors | JWT, `CLINIC_MANAGER+` |
 | `GET/PATCH /v1/doctors/:id` | Read/update doctor | JWT, scoped |
 | `PUT /v1/doctors/:id/availability` | Set recurring availability templates | JWT, `CLINIC_MANAGER+` or self (`DOCTOR`) |
+| `DELETE /v1/doctors/:id/availability/:availabilityId` | Remove a working-hours window | JWT, `CLINIC_MANAGER+` or self (`DOCTOR`) |
 | `GET/POST /v1/services` | Bookable service catalog | JWT, `CLINIC_MANAGER+` |
 | `GET/POST /v1/staff` | Staff management | JWT, `CLINIC_MANAGER+` |
 | `GET /v1/holidays?clinicId&doctorId` | List blocked dates | JWT, scoped |
@@ -79,6 +80,7 @@ on: hold, confirm, cancel, reschedule. Optional-but-honored elsewhere.
 | Method & path | Purpose | Auth |
 |---|---|---|
 | `GET /v1/availability?doctorId&serviceId&from&to` | Computed open slots (`APPOINTMENT_ENGINE.md` §7) | API key (plugin) or JWT |
+| `GET /v1/available-doctors?clinicId&from&to` | Reverse lookup: every doctor with open time in the window (photo, specialty, free ranges) - "who can see a patient right now" | API key (plugin) or JWT |
 | `POST /v1/appointments/hold` | Create a `HELD` appointment | API key/JWT, **Idempotency-Key required** |
 | `POST /v1/appointments/:id/confirm` | `HELD → CONFIRMED` | API key/JWT, Idempotency-Key required |
 | `POST /v1/appointments/:id/cancel` | → `CANCELLED` | API key/JWT, Idempotency-Key required |

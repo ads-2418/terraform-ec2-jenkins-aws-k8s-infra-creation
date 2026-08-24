@@ -273,6 +273,7 @@ model Doctor {
   userId                      String?      @unique @map("user_id")
   displayName                 String       @map("display_name")
   specialty                   String?
+  photoUrl                    String?      @map("photo_url")
   consultationDurationMinutes Int          @default(30) @map("consultation_duration_minutes")
   status                      DoctorStatus @default(ACTIVE)
   createdAt                   DateTime     @default(now()) @map("created_at")

@@ -8,6 +8,7 @@ export function DoctorsPage() {
   const [clinicId, setClinicId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,9 +36,15 @@ export function DoctorsPage() {
     e.preventDefault();
     setError(null);
     try {
-      await api.post("/v1/doctors", { clinicId, displayName, specialty: specialty || undefined });
+      await api.post("/v1/doctors", {
+        clinicId,
+        displayName,
+        specialty: specialty || undefined,
+        photoUrl: photoUrl || undefined,
+      });
       setDisplayName("");
       setSpecialty("");
+      setPhotoUrl("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create doctor.");
@@ -62,6 +69,7 @@ export function DoctorsPage() {
         </select>
         <input placeholder="Dr. Full Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
         <input placeholder="Specialty (optional)" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
+        <input placeholder="Photo URL (optional)" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} />
         <button type="submit">Add doctor</button>
       </form>
       {error && <p className="error">{error}</p>}
@@ -71,6 +79,7 @@ export function DoctorsPage() {
         <table>
           <thead>
             <tr>
+              <th></th>
               <th>Name</th>
               <th>Clinic</th>
               <th>Specialty</th>
@@ -80,6 +89,13 @@ export function DoctorsPage() {
           <tbody>
             {doctors.map((d) => (
               <tr key={d.id}>
+                <td>
+                  {d.photoUrl ? (
+                    <img src={d.photoUrl} alt={d.displayName} className="doctor-thumb" />
+                  ) : (
+                    <span className="doctor-thumb doctor-thumb-placeholder">{d.displayName.charAt(0)}</span>
+                  )}
+                </td>
                 <td>{d.displayName}</td>
                 <td>{clinicName(d.clinicId)}</td>
                 <td>{d.specialty ?? "-"}</td>

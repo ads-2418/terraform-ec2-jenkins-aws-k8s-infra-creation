@@ -58,6 +58,7 @@ const createDoctorSchema = z.object({
   clinicId: z.string().uuid(),
   displayName: z.string().min(1),
   specialty: z.string().optional(),
+  photoUrl: z.string().url().optional(),
   consultationDurationMinutes: z.number().int().positive().optional(),
   login: z.object({ email: z.string().email(), password: z.string().min(8) }).optional(),
 });
@@ -65,6 +66,7 @@ const createDoctorSchema = z.object({
 const updateDoctorSchema = z.object({
   displayName: z.string().min(1).optional(),
   specialty: z.string().optional(),
+  photoUrl: z.string().url().optional(),
   consultationDurationMinutes: z.number().int().positive().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
 });

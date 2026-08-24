@@ -8,6 +8,7 @@ import {
   completeAppointment,
   computeAvailability,
   confirmAppointment,
+  findAvailableDoctors,
   holdSlot,
   markNoShow,
   rescheduleAppointment,
@@ -31,6 +32,12 @@ function requireIdempotencyKey(request: FastifyRequest): string {
 const availabilityQuerySchema = z.object({
   doctorId: z.string().uuid(),
   serviceId: z.string().uuid(),
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+});
+
+const availableDoctorsQuerySchema = z.object({
+  clinicId: z.string().uuid(),
   from: z.string().datetime(),
   to: z.string().datetime(),
 });
@@ -74,6 +81,23 @@ export function registerAppointmentRoutes(
       }),
     );
     return { slots };
+  });
+
+  // "Which doctors can see a patient in this window, and for how long?" -
+  // the reverse of /v1/availability (which requires a doctor already
+  // chosen). Powers the receptionist/patient "who's available now" lookup.
+  app.get("/v1/available-doctors", async (request) => {
+    const auth = requireTenantAuth(request);
+    const query = parseBody(availableDoctorsQuerySchema, request.query);
+    const doctors = await withTenantContext(prisma, auth.tenantId, (tx) =>
+      findAvailableDoctors(tx, {
+        tenantId: auth.tenantId,
+        clinicId: query.clinicId,
+        from: new Date(query.from),
+        to: new Date(query.to),
+      }),
+    );
+    return { doctors };
   });
 
   app.post("/v1/appointments/hold", async (request, reply) => {

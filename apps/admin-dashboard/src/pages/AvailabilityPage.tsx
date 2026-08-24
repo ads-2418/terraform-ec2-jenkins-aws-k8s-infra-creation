@@ -4,6 +4,16 @@ import type { Clinic, Doctor, DoctorAvailability } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** "09:00" -> "22:00" becomes "13h 00m" - how long this window runs for. */
+function windowDuration(startTime: string, endTime: string): string {
+  const [startHour, startMinute] = startTime.split(":").map(Number) as [number, number];
+  const [endHour, endMinute] = endTime.split(":").map(Number) as [number, number];
+  const totalMinutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
 export function AvailabilityPage() {
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -156,6 +166,7 @@ export function AvailabilityPage() {
                 <tr>
                   <th>Day</th>
                   <th>Hours</th>
+                  <th>Duration</th>
                   <th>Slot length</th>
                   <th></th>
                 </tr>
@@ -167,6 +178,7 @@ export function AvailabilityPage() {
                     <td>
                       {w.startTime} - {w.endTime}
                     </td>
+                    <td>{windowDuration(w.startTime, w.endTime)}</td>
                     <td>{w.slotDurationMinutes} min</td>
                     <td>
                       <button onClick={() => void handleDelete(w.id)}>Remove</button>
@@ -175,7 +187,7 @@ export function AvailabilityPage() {
                 ))}
                 {sortedWindows.length === 0 && (
                   <tr>
-                    <td colSpan={4}>No working hours set for this doctor yet - add one above.</td>
+                    <td colSpan={5}>No working hours set for this doctor yet - add one above.</td>
                   </tr>
                 )}
               </tbody>

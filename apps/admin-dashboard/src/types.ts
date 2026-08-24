@@ -19,6 +19,7 @@ export interface Doctor {
   clinicId: string;
   displayName: string;
   specialty?: string | null;
+  photoUrl?: string | null;
   status: "ACTIVE" | "INACTIVE";
 }
 
@@ -70,4 +71,17 @@ export interface DoctorAvailability {
   endTime: string;
   slotDurationMinutes: number;
   serviceId: string | null;
+}
+
+export interface FreeRange {
+  startAt: string;
+  endAt: string;
+}
+
+export interface AvailableDoctor {
+  doctorId: string;
+  displayName: string;
+  specialty: string | null;
+  photoUrl: string | null;
+  freeRanges: FreeRange[];
 }

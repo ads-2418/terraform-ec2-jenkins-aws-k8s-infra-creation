@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./availability.js";
+export * from "./find-available-doctors.js";
 export * from "./hold.js";
 export * from "./confirm.js";
 export * from "./cancel.js";

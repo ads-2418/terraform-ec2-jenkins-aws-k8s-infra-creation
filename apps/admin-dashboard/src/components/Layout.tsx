@@ -16,6 +16,7 @@ export function Layout() {
         <h2>Clinic Admin</h2>
         <nav>
           <NavLink to="/appointments">Appointments</NavLink>
+          <NavLink to="/find-doctor">Find a Doctor</NavLink>
           <NavLink to="/clinics">Clinics</NavLink>
           <NavLink to="/doctors">Doctors</NavLink>
           <NavLink to="/services">Services</NavLink>
