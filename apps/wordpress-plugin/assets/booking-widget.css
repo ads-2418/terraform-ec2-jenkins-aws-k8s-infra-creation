@@ -1,0 +1,92 @@
+.clinic-booking-widget {
+  max-width: 480px;
+  font-family: inherit;
+}
+
+.cbw-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: #fff;
+}
+
+.cbw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.cbw-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.cbw-select,
+.cbw-date,
+.cbw-patient-form input {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.cbw-slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.cbw-slot-button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.cbw-slot-button:hover {
+  border-color: #2563eb;
+}
+
+.cbw-slot-selected {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.cbw-patient-form button,
+.cbw-primary {
+  margin-top: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.cbw-patient-form button:disabled,
+.cbw-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.cbw-error {
+  color: #b91c1c;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.cbw-hint {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.cbw-done p {
+  color: #065f46;
+  font-weight: 600;
+}

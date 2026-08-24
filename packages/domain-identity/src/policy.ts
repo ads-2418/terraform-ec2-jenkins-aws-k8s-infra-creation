@@ -24,7 +24,9 @@ export type Action =
   | "availability:write"
   | "appointment:write"
   | "appointment:read"
-  | "audit:read";
+  | "audit:read"
+  | "api_key:write"
+  | "api_key:read";
 
 const ALL_TENANT_ACTIONS: Action[] = [
   "clinic:write",
@@ -39,6 +41,8 @@ const ALL_TENANT_ACTIONS: Action[] = [
   "appointment:write",
   "appointment:read",
   "audit:read",
+  "api_key:write",
+  "api_key:read",
 ];
 
 const ROLE_PERMISSIONS: Record<RoleName, Action[]> = {

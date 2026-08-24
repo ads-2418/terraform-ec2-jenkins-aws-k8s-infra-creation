@@ -37,3 +37,10 @@ export async function revokeApiKey(prisma: PrismaClient, input: { tenantId: stri
     tx.apiKey.update({ where: { id: input.apiKeyId }, data: { status: "REVOKED" } }),
   );
 }
+
+/** Never includes hashedKey - the raw secret is shown to the caller exactly once, at createApiKey time, and never again. */
+export async function listApiKeys(prisma: PrismaClient, input: { tenantId: string }): Promise<ApiKey[]> {
+  return withTenantContext(prisma, input.tenantId, (tx) =>
+    tx.apiKey.findMany({ where: { tenantId: input.tenantId }, orderBy: { createdAt: "desc" } }),
+  );
+}

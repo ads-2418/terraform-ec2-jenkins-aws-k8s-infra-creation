@@ -60,6 +60,9 @@ on: hold, confirm, cancel, reschedule. Optional-but-honored elsewhere.
 | `POST /v1/auth/refresh` | Rotate access token | refresh cookie |
 | `POST /v1/auth/logout` | Revoke refresh token | refresh cookie |
 | `POST /v1/auth/mfa/verify` | Complete MFA challenge | partial session token |
+| `GET /v1/api-keys` | List a tenant's API keys (never returns the secret) | JWT, `TENANT_ADMIN+` |
+| `POST /v1/api-keys` | Create an API key — raw secret returned exactly once, in this response only | JWT, `TENANT_ADMIN+` |
+| `DELETE /v1/api-keys/:id` | Revoke an API key | JWT, `TENANT_ADMIN+` |
 
 ### Tenant/Clinic/Doctor management (`domain-tenant`)
 | Method & path | Purpose | Auth |
@@ -128,16 +131,53 @@ handling, which is what "channels never contain booking business logic"
 
 ## 5. WordPress plugin API surface
 
-The plugin is a **thin client**: its PHP backend proxies `GET
-/v1/availability`, `POST /v1/appointments/hold`, `POST
-/v1/appointments/:id/confirm` (and cancel/reschedule for a patient-facing
-"manage my booking" link with a signed token) using its tenant API key,
-rendered through a JS-driven embeddable widget (shortcode). It performs
-**no** availability computation, hold-TTL logic, or state validation of its
-own — those responses come straight from the engine and the widget just
-renders them, so there is exactly one implementation of booking rules
-across every channel (`ARCHITECTURE.md` §1, restated because it's the most
-important boundary in the whole system).
+The plugin (`apps/wordpress-plugin`) is a **thin client**. Its PHP backend
+(`Clinic_Booking_Api_Client`) attaches the tenant's API key server-side via
+`wp_remote_request()` — the key never reaches the browser — and exposes a
+same-namespace REST proxy (`Clinic_Booking_Rest_Proxy`, namespace
+`clinic-booking/v1`) that the widget's vanilla JS (`assets/booking-widget.js`,
+no build step) calls instead of the booking API directly:
+
+| Plugin route (`/wp-json/clinic-booking/v1/...`) | Proxies to | Auth |
+|---|---|---|
+| `GET /clinics` | `GET /v1/clinics` | public (nonce not required — read-only) |
+| `GET /doctors?clinicId` | `GET /v1/doctors?clinicId` | public |
+| `GET /services?clinicId` | `GET /v1/services?clinicId` | public |
+| `GET /available-doctors?clinicId&from&to` | `GET /v1/available-doctors` | public |
+| `GET /availability?doctorId&serviceId&from&to` | `GET /v1/availability` | public |
+| `POST /hold` | `POST /v1/appointments/hold` | `X-WP-Nonce` (`wp_rest` action) |
+| `POST /confirm` | `POST /v1/appointments/:id/confirm` | `X-WP-Nonce` |
+| `POST /cancel` | `POST /v1/appointments/:id/cancel` | `X-WP-Nonce` |
+
+The plugin performs **no** availability computation, hold-TTL logic, or
+state validation of its own — every response comes straight from the
+engine and the widget just renders it, so there is exactly one
+implementation of booking rules across every channel (`ARCHITECTURE.md`
+§1, restated because it's the most important boundary in the whole
+system). Reschedule is not exposed yet (no "manage my booking" link in
+this first version).
+
+The nonce (`wp_create_nonce('wp_rest')`, handed to the widget via
+`wp_localize_script`) is WordPress's standard same-origin CSRF defense —
+it works for anonymous/logged-out visitors, since it's tied to the
+browser session rather than a login. It confirms the request came from a
+page this site rendered, not a cross-site form; it is **not** a
+substitute for the API key auth, which is applied server-side on every
+proxied call regardless of nonce. Read routes skip the nonce check since
+they have no side effects. `docs/SECURITY.md`'s aspiration of an
+additional HMAC-signed request body from the plugin is not implemented —
+the backend doesn't verify such a signature today, so adding it
+client-side would be unverified security theater; it's a documented
+future hardening step, not a current guarantee.
+
+One WordPress-specific gotcha worth documenting here since it caused a
+real bug during initial verification: under WordPress's default "plain"
+permalink structure, `rest_url()` returns a query-string URL
+(`?rest_route=/clinic-booking/v1/...`) rather than a clean path
+(`/wp-json/...`). The widget's `buildUrl()` helper checks for an existing
+`?` in the base URL before appending its own query parameters (using `&`
+instead of a second `?`), so the widget works under both permalink
+structures.
 
 ## 6. Rate limiting response
 

@@ -50,9 +50,13 @@ pnpm --filter @app/worker dev
   with Meta's webhook test-send tool.
 - **Email**: MailHog captures everything by default in dev — no real
   provider credentials needed to develop notification flows end-to-end.
-- **WordPress plugin**: a local `wp-env` (or any local WP install) with the
-  plugin pointed at `http://localhost:<api-port>` via its settings screen,
-  using a dev-issued API key from the seeded tenant.
+- **WordPress plugin**: a local `wp-env` (or any local WP install — a plain
+  `wp core install` works fine, pretty permalinks are not required) with the
+  plugin activated and configured under Settings → Clinic Booking (API base
+  URL, API key, default clinic ID), using a key from `POST /v1/api-keys`
+  (`docs/API.md` §4, dashboard: Integrations page) issued against the
+  seeded tenant. Add `[clinic_booking]` to any page/post to mount the
+  widget.
 
 ### Seed data discipline
 

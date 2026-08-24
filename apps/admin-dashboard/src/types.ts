@@ -85,3 +85,12 @@ export interface AvailableDoctor {
   photoUrl: string | null;
   freeRanges: FreeRange[];
 }
+
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  status: "ACTIVE" | "REVOKED";
+  createdAt: string;
+  lastUsedAt: string | null;
+}

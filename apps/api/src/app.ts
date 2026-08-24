@@ -12,6 +12,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerTenantManagementRoutes } from "./routes/tenant-management.js";
 import { registerAppointmentRoutes } from "./routes/appointments.js";
 import { registerAuditRoutes } from "./routes/audit.js";
+import { registerApiKeyRoutes } from "./routes/api-keys.js";
 import { registerWhatsappWebhookRoutes } from "./routes/whatsapp-webhook.js";
 
 export function buildApp(config: AppConfig, deps?: { redis?: Redis }): FastifyInstance {
@@ -71,6 +72,7 @@ export function buildApp(config: AppConfig, deps?: { redis?: Redis }): FastifyIn
     queueRedis: redis,
   });
   registerAuditRoutes(app, { prisma });
+  registerApiKeyRoutes(app, { prisma });
   registerWhatsappWebhookRoutes(app, {
     prisma,
     queueRedis: redis,

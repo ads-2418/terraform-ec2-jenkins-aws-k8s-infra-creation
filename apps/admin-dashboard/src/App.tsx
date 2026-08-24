@@ -10,6 +10,7 @@ import { HolidaysPage } from "./pages/HolidaysPage";
 import { AvailabilityPage } from "./pages/AvailabilityPage";
 import { AppointmentsPage } from "./pages/AppointmentsPage";
 import { FindDoctorPage } from "./pages/FindDoctorPage";
+import { IntegrationsPage } from "./pages/IntegrationsPage";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { user } = useAuth();
@@ -35,6 +36,7 @@ function AppRoutes() {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/holidays" element={<HolidaysPage />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/availability" element={<AvailabilityPage />} />
         <Route path="/" element={<Navigate to="/appointments" replace />} />
       </Route>

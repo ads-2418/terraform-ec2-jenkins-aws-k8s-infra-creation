@@ -23,6 +23,7 @@ export function Layout() {
           <NavLink to="/staff">Staff</NavLink>
           <NavLink to="/availability">Working Hours</NavLink>
           <NavLink to="/holidays">Holidays</NavLink>
+          <NavLink to="/integrations">Integrations</NavLink>
         </nav>
         <div className="sidebar-footer">
           <span>{user?.email}</span>
