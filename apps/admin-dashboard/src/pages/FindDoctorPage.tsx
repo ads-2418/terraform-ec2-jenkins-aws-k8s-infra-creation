@@ -13,8 +13,8 @@ function nowRounded(): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+function timeLabel(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString("en-IN", { timeZone, hour: "2-digit", minute: "2-digit" });
 }
 
 export function FindDoctorPage() {
@@ -27,6 +27,8 @@ export function FindDoctorPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const clinicTimezone = clinics.find((c) => c.id === clinicId)?.timezone ?? "Asia/Kolkata";
 
   useEffect(() => {
     void (async () => {
@@ -107,7 +109,7 @@ export function FindDoctorPage() {
               <div className="free-range-chips">
                 {d.freeRanges.map((r, i) => (
                   <span className="free-range-chip" key={i}>
-                    {timeLabel(r.startAt)} - {timeLabel(r.endAt)}
+                    {timeLabel(r.startAt, clinicTimezone)} - {timeLabel(r.endAt, clinicTimezone)}
                   </span>
                 ))}
               </div>

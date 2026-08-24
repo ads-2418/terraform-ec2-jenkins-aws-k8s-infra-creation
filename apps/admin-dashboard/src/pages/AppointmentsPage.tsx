@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, idempotencyKey } from "../api/client";
-import type { Appointment, AvailabilitySlot, Clinic, Doctor, Service } from "../types";
+import type { Appointment, AvailabilitySlot, AvailableDoctor, Clinic, Doctor, Service } from "../types";
 
 const DAYS_AHEAD = 60;
 
@@ -29,6 +29,7 @@ export function AppointmentsPage() {
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayPlus(1));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
   const [patientPhone, setPatientPhone] = useState("");
   const [patientName, setPatientName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -75,11 +76,36 @@ export function AppointmentsPage() {
     setAppointments(res.appointments);
   }
 
+  // Who else at this clinic has open time on the selected date - shown
+  // right here so staff don't have to leave the booking flow to see it.
+  // Query boundaries are the browser's local midnight, not the clinic's -
+  // fine for this internal, on-site staff tool where that matches the
+  // clinic's own timezone (display times below are still clinic-timezone
+  // correct via localTimeLabel, regardless).
+  async function loadAvailableDoctors() {
+    if (!clinicId) return;
+    try {
+      const from = new Date(`${selectedDate}T00:00:00`);
+      const to = new Date(`${selectedDate}T23:59:59`);
+      const res = await api.get<{ doctors: AvailableDoctor[] }>(
+        `/v1/available-doctors?clinicId=${clinicId}&from=${from.toISOString()}&to=${to.toISOString()}`,
+      );
+      setAvailableDoctors(res.doctors);
+    } catch {
+      setAvailableDoctors([]);
+    }
+  }
+
   useEffect(() => {
     void loadAvailability();
     void loadAppointments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctorId, serviceId]);
+
+  useEffect(() => {
+    void loadAvailableDoctors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clinicId, selectedDate]);
 
   // Group fetched slots by their clinic-local calendar date, so picking a
   // date is a client-side filter rather than a fresh request per date.
@@ -159,6 +185,39 @@ export function AppointmentsPage() {
             </option>
           ))}
         </select>
+      </div>
+
+      <h2>Doctor availability on {selectedDate}</h2>
+      <p className="hint">Click a doctor to book with them - only doctors with open time on this date are shown.</p>
+      <div className="doctor-card-grid">
+        {availableDoctors.map((d) => (
+          <button
+            type="button"
+            key={d.doctorId}
+            className={`doctor-card doctor-card-button${d.doctorId === doctorId ? " doctor-card-selected" : ""}`}
+            onClick={() => setDoctorId(d.doctorId)}
+          >
+            <div className="doctor-card-header">
+              {d.photoUrl ? (
+                <img src={d.photoUrl} alt={d.displayName} className="doctor-thumb" />
+              ) : (
+                <span className="doctor-thumb doctor-thumb-placeholder">{d.displayName.charAt(0)}</span>
+              )}
+              <div>
+                <h3>{d.displayName}</h3>
+                <p>{d.specialty ?? "General"}</p>
+              </div>
+            </div>
+            <div className="free-range-chips">
+              {d.freeRanges.map((r, i) => (
+                <span className="free-range-chip" key={i}>
+                  {localTimeLabel(r.startAt, clinicTimezone)} - {localTimeLabel(r.endAt, clinicTimezone)}
+                </span>
+              ))}
+            </div>
+          </button>
+        ))}
+        {availableDoctors.length === 0 && <p>No doctors have open time on this date.</p>}
       </div>
 
       <h2>Book a new appointment</h2>

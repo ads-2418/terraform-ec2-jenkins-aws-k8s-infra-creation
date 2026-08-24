@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     });
 
     console.log("Seeding services...");
-    const generalConsult = await tx.service.upsert({
+    await tx.service.upsert({
       where: { id: "00000000-0000-0000-0000-000000000201" },
       create: {
         id: "00000000-0000-0000-0000-000000000201",
@@ -185,8 +185,13 @@ async function main(): Promise<void> {
         });
       }
 
-      // Mon-Fri, 09:00-13:00 and 14:00-18:00, 30-minute slots, for General
-      // Consultation. See docs/DATABASE.md §3 "doctor_availability".
+      // Mon-Fri, 09:00-13:00 and 14:00-18:00, 30-minute slots. Left
+      // unscoped (no serviceId) so every service the clinic offers is
+      // bookable during these hours - a doctor's stated working hours
+      // apply to their whole practice, not just one service, unless a
+      // clinic deliberately reserves specific hours for one service
+      // (which the serviceId column still supports, just not by default
+      // here). See docs/DATABASE.md §3 "doctor_availability".
       for (const dayOfWeek of [1, 2, 3, 4, 5]) {
         for (const [startTime, endTime] of [
           ["09:00", "13:00"],
@@ -208,9 +213,12 @@ async function main(): Promise<void> {
               startTime,
               endTime,
               slotDurationMinutes: 30,
-              serviceId: generalConsult.id,
             },
-            update: {},
+            // Explicit, not `{}`: earlier seed runs wrote serviceId ==
+            // General Consultation on these rows, and an empty update
+            // would silently leave that stale value in place on re-seed
+            // instead of correcting it to "applies to every service".
+            update: { serviceId: null },
           });
         }
       }

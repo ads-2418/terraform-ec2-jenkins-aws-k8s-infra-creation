@@ -247,3 +247,19 @@ td {
   padding: 0.2rem 0.6rem;
   font-size: 0.8rem;
 }
+
+.doctor-card-button {
+  text-align: left;
+  border: 2px solid transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.doctor-card-button:hover {
+  border-color: #93c5fd;
+}
+
+.doctor-card-selected {
+  border-color: #2563eb;
+}
