@@ -15,7 +15,8 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @app/db generate
 RUN pnpm build
-RUN pnpm --filter @app/worker deploy --prod /prod/worker
+# --legacy: see api.Dockerfile for why.
+RUN pnpm --filter @app/worker deploy --prod /prod/worker --legacy
 
 FROM base AS runtime
 ENV NODE_ENV=production

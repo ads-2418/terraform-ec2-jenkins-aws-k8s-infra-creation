@@ -20,7 +20,13 @@ RUN pnpm install --frozen-lockfile
 # source imports ../generated/client) - must run before any `pnpm build`.
 RUN pnpm --filter @app/db generate
 RUN pnpm build
-RUN pnpm --filter @app/api deploy --prod /prod/api
+# --legacy: pnpm v10 defaults `deploy` to requiring
+# inject-workspace-packages=true (hard-linked workspace deps) unless told
+# otherwise; the legacy behavior (resolving workspace deps like any other
+# dependency, no extra .npmrc config needed) is what this build actually
+# wants - a fully self-contained /prod/api with no symlinks back into the
+# monorepo, which is copied into a fresh runtime stage below.
+RUN pnpm --filter @app/api deploy --prod /prod/api --legacy
 
 FROM base AS runtime
 ENV NODE_ENV=production
