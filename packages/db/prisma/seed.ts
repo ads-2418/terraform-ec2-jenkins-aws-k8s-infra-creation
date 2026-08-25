@@ -92,7 +92,10 @@ async function main(): Promise<void> {
   const roles = await prisma.role.findMany();
   const roleIdByName = new Map(roles.map((r) => [r.name, r.id]));
 
-  await withTenantContext(prisma, tenant.id, async (tx) => {
+  await withTenantContext(
+    prisma,
+    tenant.id,
+    async (tx) => {
     console.log("Seeding clinic...");
     const clinic = await tx.clinic.upsert({
       where: { id: "00000000-0000-0000-0000-000000000101" },
@@ -300,7 +303,13 @@ async function main(): Promise<void> {
       },
       update: {},
     });
-  });
+    },
+    // Generous timeout: this one transaction does many sequential inserts,
+    // and Prisma's 5s default is tuned for a real request's latency budget,
+    // not for seeding a database reached over the public internet from a
+    // different region (e.g. a Codespace seeding a Render database).
+    { timeoutMs: 60_000 },
+  );
 
   console.log("\nSeed complete.");
   console.log(`Tenant: ${tenant.name} (${tenant.slug})`);

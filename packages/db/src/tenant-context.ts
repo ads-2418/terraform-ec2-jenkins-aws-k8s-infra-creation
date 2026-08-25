@@ -25,19 +25,31 @@ export class InvalidTenantIdError extends Error {
  * then interpolated directly. tenantId must always come from a
  * server-derived source (JWT claim, resolved API key row), never from
  * unvalidated client input, per docs/SECURITY.md §3.
+ *
+ * `timeoutMs` overrides Prisma's default 5000ms interactive-transaction
+ * timeout. Request-serving callers should never need this (a real request
+ * is same-region, low-latency, and a 5s budget is itself a safety net
+ * against a hung query) - it exists for long-running admin operations like
+ * `prisma/seed.ts`, whose sequential inserts can outrun that budget when
+ * run against a database reached over the public internet from a
+ * different region (e.g. seeding a Render database from a Codespace).
  */
 export async function withTenantContext<T>(
   prisma: PrismaClient,
   tenantId: string,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: { timeoutMs?: number },
 ): Promise<T> {
   if (!UUID_RE.test(tenantId)) {
     throw new InvalidTenantIdError(tenantId);
   }
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId}'`);
-    return fn(tx);
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId}'`);
+      return fn(tx);
+    },
+    options?.timeoutMs ? { timeout: options.timeoutMs } : undefined,
+  );
 }
 
 /**
