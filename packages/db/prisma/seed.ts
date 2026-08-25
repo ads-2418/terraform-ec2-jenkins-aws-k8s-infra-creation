@@ -1,5 +1,5 @@
 import { hashPassword } from "@app/shared";
-import { getPrismaClient, withTenantContext, disconnectPrisma } from "../src/index.js";
+import { getPrismaClient, withPlatformContext, withTenantContext, disconnectPrisma } from "../src/index.js";
 import { RoleName, StaffRole, type Prisma } from "../generated/client/index.js";
 
 /**
@@ -52,6 +52,25 @@ async function main(): Promise<void> {
       create: { name },
       update: {},
     });
+  }
+
+  console.log("Seeding platform admin (tenantId: null - signs in with no Clinic ID)...");
+  const platformAdminEmail = "platform-admin@saas.internal";
+  const existingPlatformAdmin = await withPlatformContext(prisma, (tx) =>
+    tx.user.findFirst({ where: { tenantId: null, email: platformAdminEmail } }),
+  );
+  if (!existingPlatformAdmin) {
+    const platformAdminPasswordHash = await hashPassword(DEV_PASSWORD);
+    await withPlatformContext(prisma, (tx) =>
+      tx.user.create({
+        data: {
+          id: "00000000-0000-0000-0000-000000000901",
+          tenantId: null,
+          email: platformAdminEmail,
+          passwordHash: platformAdminPasswordHash,
+        },
+      }),
+    );
   }
 
   console.log("Seeding demo tenant...");
@@ -290,6 +309,7 @@ async function main(): Promise<void> {
   console.log("  dr.mehta@demo-clinic.test     (DOCTOR)");
   console.log("  dr.rao@demo-clinic.test       (DOCTOR)");
   console.log("  front.desk@demo-clinic.test   (STAFF / RECEPTIONIST)");
+  console.log(`\nPlatform admin (leave Clinic ID blank to sign in): ${platformAdminEmail} / ${DEV_PASSWORD}`);
 }
 
 main()

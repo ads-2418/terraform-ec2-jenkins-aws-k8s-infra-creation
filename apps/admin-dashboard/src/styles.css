@@ -279,3 +279,17 @@ td {
   word-break: break-all;
   font-size: 0.9rem;
 }
+
+.link-button {
+  background: none;
+  border: none;
+  color: #2563eb;
+  padding: 0;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}

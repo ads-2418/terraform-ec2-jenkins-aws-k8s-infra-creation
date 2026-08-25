@@ -11,10 +11,25 @@ import { AvailabilityPage } from "./pages/AvailabilityPage";
 import { AppointmentsPage } from "./pages/AppointmentsPage";
 import { FindDoctorPage } from "./pages/FindDoctorPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { PlatformTenantsPage } from "./pages/PlatformTenantsPage";
 
+function isPlatformAdmin(roles: string[]): boolean {
+  return roles.includes("PLATFORM_ADMIN");
+}
+
+/** Tenant-scoped pages: a platform admin has no tenant data to see here, so send them to their own view instead. */
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (isPlatformAdmin(user.roles)) return <Navigate to="/platform/tenants" replace />;
+  return children;
+}
+
+/** The reverse: platform-only pages are meaningless for a tenant-scoped user. */
+function RequirePlatformAuth({ children }: { children: React.ReactElement }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isPlatformAdmin(user.roles)) return <Navigate to="/appointments" replace />;
   return children;
 }
 
@@ -22,6 +37,14 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/platform/tenants"
+        element={
+          <RequirePlatformAuth>
+            <PlatformTenantsPage />
+          </RequirePlatformAuth>
+        }
+      />
       <Route
         element={
           <RequireAuth>

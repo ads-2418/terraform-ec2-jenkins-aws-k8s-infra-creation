@@ -56,7 +56,7 @@ on: hold, confirm, cancel, reschedule. Optional-but-honored elsewhere.
 ### Auth (`domain-identity`)
 | Method & path | Purpose | Auth |
 |---|---|---|
-| `POST /v1/auth/login` | Dashboard login | none (rate-limited) |
+| `POST /v1/auth/login` | Dashboard login — omit `tenantSlug` to sign in as a platform admin (a user with no tenant) | none (rate-limited) |
 | `POST /v1/auth/refresh` | Rotate access token | refresh cookie |
 | `POST /v1/auth/logout` | Revoke refresh token | refresh cookie |
 | `POST /v1/auth/mfa/verify` | Complete MFA challenge | partial session token |
@@ -128,6 +128,19 @@ handling, which is what "channels never contain booking business logic"
 | Method & path | Purpose | Auth |
 |---|---|---|
 | `GET /v1/audit-log?resourceType&resourceId&from&to` | Compliance/investigation query | JWT, `TENANT_ADMIN+`, itself audited |
+
+### Platform (`domain-identity`, the SaaS operator's own view)
+| Method & path | Purpose | Auth |
+|---|---|---|
+| `GET /v1/platform/tenants` | Every tenant with its active/total API key counts — the licensing/usage signal for "how many integrations does this customer actually have" | JWT, `PLATFORM_ADMIN` only |
+
+`PLATFORM_ADMIN` is granted only to a `users` row with `tenant_id IS NULL`
+(`docs/DATABASE.md` §`users`) — such a user signs in by leaving `tenantSlug`
+blank on `POST /v1/auth/login` and has no tenant data of their own to see;
+this route and any future platform-operator endpoints are the entire
+reason that account exists. A tenant-scoped `TENANT_ADMIN` can never reach
+this route no matter what they send, since their token's `tenantId` is
+never null and their role claims never include `PLATFORM_ADMIN`.
 
 ## 5. WordPress plugin API surface
 

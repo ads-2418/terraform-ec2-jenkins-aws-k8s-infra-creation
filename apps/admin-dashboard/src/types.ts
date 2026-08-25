@@ -94,3 +94,14 @@ export interface ApiKeySummary {
   createdAt: string;
   lastUsedAt: string | null;
 }
+
+/** Platform-admin-only view (docs/API.md §4) - one row per tenant, for licensing/usage visibility. */
+export interface PlatformTenantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  createdAt: string;
+  activeApiKeyCount: number;
+  totalApiKeyCount: number;
+}

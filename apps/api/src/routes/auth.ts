@@ -10,7 +10,8 @@ import { checkRateLimit } from "../rate-limit.js";
 import { parseBody } from "../validate.js";
 
 const loginSchema = z.object({
-  tenantSlug: z.string().min(1),
+  // Omit for a platform-admin login (docs/API.md §4) - a user with no tenant.
+  tenantSlug: z.string().min(1).optional(),
   email: z.string().email(),
   password: z.string().min(1),
 });

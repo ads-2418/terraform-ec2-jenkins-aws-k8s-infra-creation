@@ -10,7 +10,8 @@ export interface AuthConfig {
 }
 
 export interface LoginInput {
-  tenantSlug: string;
+  /** Omit to log in as a platform admin (a user with tenantId === null - docs/DATABASE.md §users). */
+  tenantSlug?: string;
   email: string;
   password: string;
 }
@@ -21,7 +22,7 @@ export interface AuthTokens {
 }
 
 export interface LoginOutput extends AuthTokens {
-  user: { id: string; email: string };
+  user: { id: string; email: string; roles: string[] };
 }
 
 // Computed once and reused so a login attempt against a nonexistent
@@ -45,11 +46,58 @@ function roleClaimsFromAssignments(
   }));
 }
 
+/**
+ * A user row with tenantId === null IS a platform admin, by construction -
+ * there is no role_assignments row to check (that table is strictly
+ * tenant-scoped, docs/DATABASE.md's RLS migration), so this role claim is
+ * synthesized rather than read from the database.
+ */
+async function loginAsPlatformAdmin(
+  prisma: PrismaClient,
+  config: AuthConfig,
+  input: { email: string; password: string },
+): Promise<LoginOutput> {
+  return withPlatformContext(prisma, async (tx) => {
+    const user = await tx.user.findFirst({ where: { tenantId: null, email: input.email } });
+
+    if (!user || user.status !== "ACTIVE") {
+      await verifyPassword(await getDummyHash(), input.password);
+      throw new UnauthorizedError("Invalid credentials.");
+    }
+
+    const valid = await verifyPassword(user.passwordHash, input.password);
+    if (!valid) throw new UnauthorizedError("Invalid credentials.");
+
+    const roles: AccessTokenRoleClaim[] = [{ role: "PLATFORM_ADMIN" }];
+    const accessToken = await signAccessToken(
+      { sub: user.id, tenantId: null, roles },
+      config.accessSecret,
+      config.accessTtlMinutes,
+    );
+
+    const { raw, hashedKey } = generateSecret("rt");
+    await tx.refreshToken.create({
+      data: {
+        tenantId: null,
+        userId: user.id,
+        tokenHash: hashedKey,
+        expiresAt: new Date(Date.now() + config.refreshTtlDays * 86_400_000),
+      },
+    });
+
+    return { accessToken, refreshToken: raw, user: { id: user.id, email: user.email, roles: ["PLATFORM_ADMIN"] } };
+  });
+}
+
 export async function login(
   prisma: PrismaClient,
   config: AuthConfig,
   input: LoginInput,
 ): Promise<LoginOutput> {
+  if (!input.tenantSlug) {
+    return loginAsPlatformAdmin(prisma, config, input);
+  }
+
   const tenant = await prisma.tenant.findUnique({ where: { slug: input.tenantSlug } });
 
   if (!tenant || tenant.status !== "ACTIVE") {
@@ -88,7 +136,11 @@ export async function login(
       },
     });
 
-    return { accessToken, refreshToken: raw, user: { id: user.id, email: user.email } };
+    return {
+      accessToken,
+      refreshToken: raw,
+      user: { id: user.id, email: user.email, roles: roles.map((r) => r.role) },
+    };
   });
 }
 
