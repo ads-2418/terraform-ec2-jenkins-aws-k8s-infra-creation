@@ -20,6 +20,8 @@ RUN pnpm --filter @app/worker deploy --prod /prod/worker --legacy
 
 FROM base AS runtime
 ENV NODE_ENV=production
+# See api.Dockerfile for why - same @app/db dependency, same fix.
+RUN apk add --no-cache openssl
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /prod/worker .

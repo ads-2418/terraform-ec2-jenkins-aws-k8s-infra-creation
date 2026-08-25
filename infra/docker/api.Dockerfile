@@ -30,6 +30,14 @@ RUN pnpm --filter @app/api deploy --prod /prod/api --legacy
 
 FROM base AS runtime
 ENV NODE_ENV=production
+# Prisma's runtime engine-selection needs the `openssl` package present to
+# correctly detect the OpenSSL version on this image and load the matching
+# query engine binary (schema.prisma's binaryTargets already includes
+# linux-musl-openssl-3.0.x, which node:20-alpine's OpenSSL 3.x satisfies) -
+# without this, detection falls back to guessing an OpenSSL 1.1.x engine,
+# which fails to load since this Alpine version has no libssl.so.1.1 at
+# all. https://pris.ly/d/alpine
+RUN apk add --no-cache openssl
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /prod/api .
